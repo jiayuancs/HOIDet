@@ -1,3 +1,6 @@
 [submodule "detr"]
 	path = detr
 	url = git@github.com:jiayuancs/detr.git
+[submodule "pocket"]
+	path = pocket
+	url = git@github.com:jiayuancs/pocket.git
