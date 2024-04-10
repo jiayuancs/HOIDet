@@ -35,10 +35,10 @@ VCOCO_INFO = DatasetInfo(
         "test": "mscoco2014/val2014"
     },
     partition_anno={
-        "train": "instances_vcoco_train.json",
-        "val": "instances_vcoco_val.json",
-        "trainval": "instances_vcoco_trainval.json",
-        "test": "instances_vcoco_test.json"
+        "train": "instances_vcoco_train_size.json",
+        "val": "instances_vcoco_val_size.json",
+        "trainval": "instances_vcoco_trainval_size.json",
+        "test": "instances_vcoco_test_size.json"
     },
     object_class_num=80,
     hoi_class_num=-1,  # vcoco 数据集不需要统计该类别信息

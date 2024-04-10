@@ -50,7 +50,7 @@ class VCOCO(ImageDataset):
 
     def __len__(self) -> int:
         """Return the number of images"""
-        return len(self._keep)
+        return len(self._coco_image_ids)
 
     def __getitem__(self, i: int) -> Tuple[Any, Any]:
         """
@@ -73,9 +73,9 @@ class VCOCO(ImageDataset):
                     left and bottom right corners
                 boxes_o: List[list]
                     Object bounding boxes corresponding to the human boxes
-                actions: List[int]
+                verb: List[int]
                     Ground truth action class for each human-object pair
-                objects: List[int]
+                object: List[int]
                     Object category index for each object in human-object pairs. The
                     indices follow the 80-class standard, where 0 means background and
                     1 means person.
@@ -83,8 +83,7 @@ class VCOCO(ImageDataset):
         image = self.load_image(os.path.join(
             self._root, self.filename(i)
         ))
-        target = self._anno[self._keep[i]].copy()
-        target.pop('file_name')
+        target = self._anno[i].copy()
         return self._transforms(image, target)
 
     def __repr__(self) -> str:
@@ -109,9 +108,9 @@ class VCOCO(ImageDataset):
         return self._anno
 
     @property
-    def actions(self) -> List[str]:
+    def verbs(self) -> List[str]:
         """Return the list of actions"""
-        return self._actions
+        return self._verbs
 
     @property
     def objects(self) -> List[str]:
@@ -124,64 +123,69 @@ class VCOCO(ImageDataset):
         return self._present_objects
 
     @property
-    def num_instances(self) -> List[int]:
+    def verb_instance_num(self) -> List[int]:
         """Return the number of human-object pairs for each action class"""
-        return self._num_instances
+        return self._verb_instance_num
 
     @property
-    def action_to_object(self) -> List[list]:
+    def verb_to_object(self) -> List[list]:
         """Return the list of objects for each action"""
-        return self._action_to_object
+        return self._verb_to_object
 
     @property
-    def object_to_action(self) -> Dict[int, list]:
+    def object_to_verb(self) -> Dict[int, list]:
         """Return the list of actions for each object"""
-        object_to_action = {obj: [] for obj in list(range(1, 81))}
-        for act, obj in enumerate(self._action_to_object):
+        object_to_verb_dict = {obj: [] for obj in list(range(1, len(self._objects)))}
+        for verb, obj in enumerate(self._verb_to_object):
             for o in obj:
-                if act not in object_to_action[o]:
-                    object_to_action[o].append(act)
-        return object_to_action
+                if verb not in object_to_verb_dict[o]:
+                    object_to_verb_dict[o].append(verb)
+        return object_to_verb_dict
 
-    def image_id(self, idx: int) -> int:
+    def coco_image_id(self, idx: int) -> int:
         """Return the COCO image ID"""
-        return self._image_ids[self._keep[idx]]
+        return self._coco_image_ids[idx]
 
     def filename(self, idx: int) -> str:
         """Return the image file name given the index"""
-        return self._anno[self._keep[idx]]['file_name']
+        return self._filenames[idx]
 
     def image_size(self, idx: int) -> Tuple[int, int]:
         """Return the size (width, height) of an image"""
-        return self.load_image(os.path.join(
-            self._root,
-            self.filename(idx)
-        )).size
+        return self._image_size[idx]
 
     def _compute_metatdata(self, f: dict) -> None:
-        self._anno = f['annotations']
-        self._actions = f['classes']
-        self._objects = f['objects']
-        self._image_ids = f['images']
-        self._action_to_object = f['action_to_object']
-
-        keep = list(range(len(f['images'])))
-        num_instances = [0 for _ in range(len(f['classes']))]
-        valid_objects = [[] for _ in range(len(f['classes']))]
+        # keep 是符合要求的样本下标列表（即至少包含1个动作的图片下标列表）
+        keep = list(range(len(f['annotations'])))
+        # action_instance_num[i]表示第i个动作的实例个数（一张图片中可能存在多个实例）
+        action_instance_num = [0 for _ in range(len(f['verbs']))]
+        # valid_objects[i]表示第i个动作对应的目标类别列表
+        valid_objects = [[] for _ in range(len(f['verbs']))]
         for i, anno_in_image in enumerate(f['annotations']):
             # Remove images without human-object pairs
-            if len(anno_in_image['actions']) == 0:
+            if len(anno_in_image['verb']) == 0:  # 如果该图片中不存在任何动作，则删除该图片
                 keep.remove(i)
                 continue
-            for act, obj in zip(anno_in_image['actions'], anno_in_image['objects']):
-                num_instances[act] += 1
+            for act, obj in zip(anno_in_image['verb'], anno_in_image['object']):
+                action_instance_num[act] += 1
                 if obj not in valid_objects[act]:
                     valid_objects[act].append(obj)
 
+        # self._present_objects 是该分区中实际出现的物体类别编号列表
         objects = list(itertools.chain.from_iterable(valid_objects))
         self._present_objects = np.unique(np.asarray(objects)).tolist()
-        self._num_instances = num_instances
-        self._keep = keep
+        # self._action_instance_num[i]表示第i个动作的实例个数（一张图片中可能存在多个实例）
+        self._verb_instance_num = action_instance_num
+
+        # 删除不包含任何人物对的样本
+        self._anno = [f['annotations'][idx] for idx in keep]     # List[dict]，每张图片的所有标注信息
+        self._coco_image_ids = [f['coco_image_id'][idx] for idx in keep]  # 图片在coco数据集中的编号
+        self._image_size = [f['size'][idx] for idx in keep]      # 图片大小
+        self._filenames = [f['filenames'][idx] for idx in keep]  # 图片名称
+
+        self._verbs = f['verbs']        # 每个动作的名称
+        self._objects = f['objects']    # 每个目标的名称
+        self._verb_to_object = f['verb_to_object']   # 每个动作可对应的目标列表
 
 
 if __name__ == '__main__':
