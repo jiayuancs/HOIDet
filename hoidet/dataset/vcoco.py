@@ -1,10 +1,5 @@
 """
-V-COCO dataset in Python3
-
-Fred Zhang <frederic.zhang@anu.edu.au>
-
-The Australian National University
-Australian Centre for Robotic Vision
+修改自：https://github.com/fredzzhang/vcoco/blob/main/vcoco.py
 """
 
 import os
@@ -13,7 +8,7 @@ import itertools
 import numpy as np
 
 from typing import Optional, List, Callable, Tuple, Any, Dict
-from hoidet.dataset.base import ImageDataset
+from hoidet.dataset.base import ImageDataset, DatasetInfo
 
 
 class VCOCO(ImageDataset):
@@ -22,10 +17,10 @@ class VCOCO(ImageDataset):
 
     Parameters:
     -----------
-    root: str
-        Root directory where images are saved.
-    anno_file: str
-        Path to json annotation file.
+    dataset_info(DatasetInfo):
+        数据集基本信息
+    partition(str):
+        数据集分区
     transform: callable
         A function/transform that  takes in an PIL image and returns a transformed version.
     target_transform: callble
@@ -35,18 +30,20 @@ class VCOCO(ImageDataset):
         returns a transformed version.
     """
 
-    def __init__(self, root: str, anno_file: str,
+    def __init__(self,
+                 dataset_info: DatasetInfo,
+                 partition: str,
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  transforms: Optional[Callable] = None) -> None:
-        super().__init__(root, transform, target_transform, transforms)
-        with open(anno_file, 'r') as f:
+        super().__init__(dataset_info.get_image_path(partition), transform, target_transform, transforms)
+
+        self._anno_file = dataset_info.get_anno_path(partition)
+        with open(self._anno_file, 'r') as f:
             anno = json.load(f)
 
-        self.num_object_cls = None
-        self.num_action_cls = 24
-
-        self._anno_file = anno_file
+        self.num_object_cls = dataset_info.get_object_class_num()
+        self.num_action_cls = dataset_info.get_verb_class_num()  # 24
 
         # Compute metadata
         self._compute_metatdata(anno)
@@ -185,3 +182,14 @@ class VCOCO(ImageDataset):
         self._present_objects = np.unique(np.asarray(objects)).tolist()
         self._num_instances = num_instances
         self._keep = keep
+
+
+if __name__ == '__main__':
+    from config import VCOCO_INFO
+
+    vcoco = VCOCO(
+        dataset_info=VCOCO_INFO,
+        partition="trainval"
+    )
+
+    print(vcoco)

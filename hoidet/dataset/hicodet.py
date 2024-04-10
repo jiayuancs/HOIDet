@@ -1,10 +1,5 @@
 """
-HICODet dataset under PyTorch framework
-
-Fred Zhang <frederic.zhang@anu.edu.au>
-
-The Australian National University
-Australian Centre for Robotic Vision
+修改自：https://github.com/fredzzhang/pocket/blob/master/pocket/data/hicodet.py
 """
 
 import os
@@ -12,7 +7,7 @@ import json
 import numpy as np
 
 from typing import Optional, List, Callable, Tuple
-from hoidet.dataset.base import ImageDataset, DataSubset
+from hoidet.dataset.base import ImageDataset, DataSubset, DatasetInfo
 
 
 class HICODetSubset(DataSubset):
@@ -59,8 +54,8 @@ class HICODetSubset(DataSubset):
 class HICODet(ImageDataset):
     """
     Arguments:
-        root(str): Root directory where images are downloaded to
-        anno_file(str): Path to json annotation file
+        dataset_info(DatasetInfo): 数据集基本信息
+        partition(str): 数据集分区
         transform(callable, optional): A function/transform that  takes in an PIL image
             and returns a transformed version
         target_transform(callable, optional): A function/transform that takes in the
@@ -69,18 +64,21 @@ class HICODet(ImageDataset):
             and its target as entry and returns a transformed version.
     """
 
-    def __init__(self, root: str, anno_file: str,
+    def __init__(self,
+                 dataset_info: DatasetInfo,
+                 partition: str,
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  transforms: Optional[Callable] = None) -> None:
-        super(HICODet, self).__init__(root, transform, target_transform, transforms)
-        with open(anno_file, 'r') as f:
+        super(HICODet, self).__init__(dataset_info.get_image_path(partition), transform, target_transform, transforms)
+
+        self._anno_file = dataset_info.get_anno_path(partition)
+        with open(self._anno_file, 'r') as f:
             anno = json.load(f)
 
-        self.num_object_cls = 80
-        self.num_interation_cls = 600
-        self.num_action_cls = 117
-        self._anno_file = anno_file
+        self.num_object_cls = dataset_info.get_object_class_num()
+        self.num_interation_cls = dataset_info.get_hoi_class_num()
+        self.num_action_cls = dataset_info.get_verb_class_num()
 
         # Load annotations
         self._load_annotation_and_metadata(anno)
@@ -123,7 +121,7 @@ class HICODet(ImageDataset):
         reprstr = 'Dataset: ' + self.__class__.__name__ + '\n'
         reprstr += '\tNumber of images: {}\n'.format(self.__len__())
         reprstr += '\tImage directory: {}\n'.format(self._root)
-        reprstr += '\tAnnotation file: {}\n'.format(self._root)
+        reprstr += '\tAnnotation file: {}\n'.format(self._anno_file)
         return reprstr
 
     @property
@@ -302,4 +300,11 @@ class HICODet(ImageDataset):
 
 
 if __name__ == '__main__':
-    print("h")
+    from config import HICO_DET_INFO
+
+    hico_det_train = HICODet(
+        dataset_info=HICO_DET_INFO,
+        partition="train2015"
+    )
+
+    print(hico_det_train)

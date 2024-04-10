@@ -48,11 +48,31 @@ class DatasetInfo:
         self._hoi_class_num = hoi_class_num
         self._verb_class_num = verb_class_num
 
+    def set_root(self, root: str):
+        """
+        更新数据集根目录
+        Args:
+            root: 数据集根目录
+
+        Returns:
+
+        """
+        self._data_root = root
+
     def get_name(self) -> str:
         return self._name
 
     def get_root(self) -> str:
         return self._data_root
+
+    def get_hoi_class_num(self):
+        return self._hoi_class_num
+
+    def get_verb_class_num(self):
+        return self._verb_class_num
+
+    def get_object_class_num(self):
+        return self._object_class_num
 
     def get_anno_path(self, partition: str) -> str:
         """
@@ -111,15 +131,6 @@ class DataDict(dict):
         input_dict(dict, optional): A Python dictionary
         kwargs: Keyworded arguments to be stored in the dict
 
-    Example:
-
-        >>> from pocket.data import DataDict
-        >>> person = DataDict()
-        >>> person.is_empty()
-        True
-        >>> person.age = 15
-        >>> person.sex = 'male'
-        >>> person.save('./person.pkl', 'w')
     """
 
     def __init__(self, input_dict: Optional[dict] = None, **kwargs) -> None:
