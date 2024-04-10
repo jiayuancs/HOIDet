@@ -12,7 +12,7 @@ import json
 import numpy as np
 
 from typing import Optional, List, Callable, Tuple
-from .base import ImageDataset, DataSubset
+from hoidet.dataset.base import ImageDataset, DataSubset
 
 
 class HICODetSubset(DataSubset):
@@ -299,3 +299,7 @@ class HICODet(ImageDataset):
         self._empty_idx = f['empty']
         self._objects = f['objects']
         self._verbs = f['verbs']
+
+
+if __name__ == '__main__':
+    print("h")

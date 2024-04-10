@@ -8,7 +8,7 @@ Transformer Encoder
 from torch import nn, Tensor
 from typing import Optional
 
-from attention import MultiHeadAttention
+from hoidet.transformer.attention import MultiHeadAttention
 
 __all__ = ['TransformerEncoderLayer', 'TransformerEncoder']
 

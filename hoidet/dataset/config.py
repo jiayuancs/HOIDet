@@ -1,7 +1,7 @@
 """
 定义用于模型训练和验证的数据集
 """
-from .base import DatasetInfo
+from hoidet.dataset.base import DatasetInfo
 
 __all__ = ['HICO_DET_INFO', 'VCOCO_INFO']
 

@@ -13,7 +13,7 @@ import itertools
 import numpy as np
 
 from typing import Optional, List, Callable, Tuple, Any, Dict
-from .base import ImageDataset
+from hoidet.dataset.base import ImageDataset
 
 
 class VCOCO(ImageDataset):
