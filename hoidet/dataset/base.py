@@ -12,7 +12,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from typing import Any, Callable, List, Optional, Tuple
 
-__all__ = ['DatasetInfo', 'DataDict', 'ImageDataset', 'DataSubset']
+__all__ = ['DatasetInfo', 'DatasetBase', 'DataDict', 'ImageDataset', 'DataSubset']
 
 
 class DatasetInfo:
@@ -108,6 +108,105 @@ class DatasetInfo:
                f"\tverb_class_num: {self._verb_class_num}\n"
                f"\thoi_class_num: {self._hoi_class_num}\n")
         return res
+
+
+class DatasetBase(Dataset):
+    """
+    所有 HOI 数据集的基类
+
+    方法命名规范如下：
+        - get_xxx：所有以get开头的方法均接受一个 idx 参数，表示获取第 idx 样本的属性
+    """
+
+    def __init__(self, transform: Optional[Callable] = None,
+                 target_transform: Optional[Callable] = None,
+                 transforms: Optional[Callable] = None) -> None:
+        self._transform = transform
+        self._target_transform = target_transform
+        if transforms is None:
+            self._transforms = StandardTransform(transform, target_transform)
+        elif transform is not None or target_transform is not None:
+            print("WARNING: Argument transforms is given, transform/target_transform are ignored.")
+            self._transforms = transforms
+        else:
+            self._transforms = transforms
+
+        self.name = ""
+        self.image_path = ""
+        self.anno_path = ""
+
+        self.object_class_num = -1
+        self.verb_class_num = -1
+        self.hoi_class_num = -1
+
+        self._anno = None
+        self._verbs = None
+        self._objects = None
+        self._image_sizes = None
+        self._filenames = None
+
+    def __len__(self):
+        return len(self._filenames)
+
+    def __getitem__(self, i):
+        raise NotImplementedError
+
+    def __repr__(self) -> str:
+        """Return the executable string representation"""
+        reprstr = self.__class__.__name__ + '(root=' + repr(self.image_path)
+        reprstr += ', anno_file='
+        reprstr += repr(self.anno_path)
+        reprstr += ')'
+        # Ignore the optional arguments
+        return reprstr
+
+    def __str__(self) -> str:
+        return (f"Dataset: {self.name}\n"
+                f"\tNumber of images: {self.__len__()}\n"
+                f"\tImage directory: {self.image_path}\n"
+                f"\tAnnotation file: {self.anno_path}\n")
+
+    def _load_annotation_and_metadata(self):
+        """加载数据集"""
+        raise NotImplementedError
+
+    @property
+    def annotations(self) -> List[dict]:
+        """返回所有图片的标注信息"""
+        return self._anno
+
+    @property
+    def verbs(self) -> List[str]:
+        """返回所有动作名称列表"""
+        return self._verbs
+
+    @property
+    def objects(self) -> List[str]:
+        """返回所有物体类别名称列表"""
+        return self._objects
+
+    @property
+    def image_sizes(self) -> Tuple[int, int]:
+        """返回所有图片大小列表，格式为[(W,H),...]"""
+        return self._image_sizes
+
+    @property
+    def filenames(self) -> List[str]:
+        """返回所有图片名称列表"""
+        return self._filenames
+
+    def get_hoi_class_name(self, idx: int) -> List[str]:
+        """返回第idx个图片中所有的HOI文本标签"""
+        hoi_name_list = []
+        for verb, obj in zip(self._anno[idx]['verb'], self._anno[idx]['object']):
+            hoi_name_list.append(f"{self._verbs[verb]} {self._objects[obj]}")
+        return hoi_name_list
+
+    @staticmethod
+    def load_image(path: str) -> Image:
+        """Load an image as PIL.Image"""
+        return Image.open(path).convert('RGB')
+
 
 
 """

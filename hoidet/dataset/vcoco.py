@@ -8,10 +8,10 @@ import itertools
 import numpy as np
 
 from typing import Optional, List, Callable, Tuple, Any, Dict
-from hoidet.dataset.base import ImageDataset, DatasetInfo
+from hoidet.dataset.base import DatasetInfo, DatasetBase
 
 
-class VCOCO(ImageDataset):
+class VCOCO(DatasetBase):
     """
     V-COCO dataset
 
@@ -36,21 +36,16 @@ class VCOCO(ImageDataset):
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  transforms: Optional[Callable] = None) -> None:
-        super().__init__(dataset_info.get_image_path(partition), transform, target_transform, transforms)
+        super().__init__(transform, target_transform, transforms)
+        self.name = dataset_info.get_name()
+        self.image_path = dataset_info.get_image_path(partition)
+        self.anno_path = dataset_info.get_anno_path(partition)
 
-        self._anno_file = dataset_info.get_anno_path(partition)
-        with open(self._anno_file, 'r') as f:
-            anno = json.load(f)
-
-        self.num_object_cls = dataset_info.get_object_class_num()
-        self.num_action_cls = dataset_info.get_verb_class_num()  # 24
+        self.object_class_num = dataset_info.get_object_class_num()
+        self.verb_class_num = dataset_info.get_verb_class_num()  # 24
 
         # Compute metadata
-        self._compute_metatdata(anno)
-
-    def __len__(self) -> int:
-        """Return the number of images"""
-        return len(self._coco_image_ids)
+        self._load_annotation_and_metadata()
 
     def __getitem__(self, i: int) -> Tuple[Any, Any]:
         """
@@ -80,42 +75,10 @@ class VCOCO(ImageDataset):
                     indices follow the 80-class standard, where 0 means background and
                     1 means person.
         """
-        image = self.load_image(os.path.join(
-            self._root, self.filename(i)
-        ))
-        target = self._anno[i].copy()
-        return self._transforms(image, target)
-
-    def __repr__(self) -> str:
-        """Return the executable string representation"""
-        reprstr = self.__class__.__name__ + '(root=' + repr(self._root)
-        reprstr += ', anno_file='
-        reprstr += repr(self._anno_file)
-        reprstr += ')'
-        # Ignore the optional arguments
-        return reprstr
-
-    def __str__(self) -> str:
-        """Return the readable string representation"""
-        reprstr = 'Dataset: ' + self.__class__.__name__ + '\n'
-        reprstr += '\tNumber of images: {}\n'.format(self.__len__())
-        reprstr += '\tImage directory: {}\n'.format(self._root)
-        reprstr += '\tAnnotation file: {}\n'.format(self._anno_file)
-        return reprstr
-
-    @property
-    def annotations(self) -> List[dict]:
-        return self._anno
-
-    @property
-    def verbs(self) -> List[str]:
-        """Return the list of actions"""
-        return self._verbs
-
-    @property
-    def objects(self) -> List[str]:
-        """Return the list of objects"""
-        return self._objects
+        return self._transforms(
+            self.load_image(os.path.join(self.image_path, self._filenames[i])),
+            self._anno[i]
+        )
 
     @property
     def present_objects(self) -> List[int]:
@@ -146,15 +109,10 @@ class VCOCO(ImageDataset):
         """Return the COCO image ID"""
         return self._coco_image_ids[idx]
 
-    def filename(self, idx: int) -> str:
-        """Return the image file name given the index"""
-        return self._filenames[idx]
+    def _load_annotation_and_metadata(self) -> None:
+        with open(self.anno_path, 'r') as fd:
+            f = json.load(fd)
 
-    def image_size(self, idx: int) -> Tuple[int, int]:
-        """Return the size (width, height) of an image"""
-        return self._image_size[idx]
-
-    def _compute_metatdata(self, f: dict) -> None:
         # keep 是符合要求的样本下标列表（即至少包含1个动作的图片下标列表）
         keep = list(range(len(f['annotations'])))
         # action_instance_num[i]表示第i个动作的实例个数（一张图片中可能存在多个实例）
@@ -178,14 +136,17 @@ class VCOCO(ImageDataset):
         self._verb_instance_num = action_instance_num
 
         # 删除不包含任何人物对的样本
-        self._anno = [f['annotations'][idx] for idx in keep]     # List[dict]，每张图片的所有标注信息
+        self._anno = [f['annotations'][idx] for idx in keep]  # List[dict]，每张图片的所有标注信息
         self._coco_image_ids = [f['coco_image_id'][idx] for idx in keep]  # 图片在coco数据集中的编号
-        self._image_size = [f['size'][idx] for idx in keep]      # 图片大小
+        self._image_sizes = [f['size'][idx] for idx in keep]  # 图片大小
         self._filenames = [f['filenames'][idx] for idx in keep]  # 图片名称
 
-        self._verbs = f['verbs']        # 每个动作的名称
-        self._objects = f['objects']    # 每个目标的名称
-        self._verb_to_object = f['verb_to_object']   # 每个动作可对应的目标列表
+        self._verbs = f['verbs']  # 每个动作的名称
+        self._objects = f['objects']  # 每个目标的名称
+        self._verb_to_object = f['verb_to_object']  # 每个动作可对应的目标列表
+
+        # VCOCO 边界框坐标范围是 [0, W] 或 [0, H]，其中 (W,H) 是图像宽高.
+        # 已经是 zero-based index，故不进行转换
 
 
 if __name__ == '__main__':
@@ -197,3 +158,10 @@ if __name__ == '__main__':
     )
 
     print(vcoco)
+
+    from hoidet.visualization.visual import draw_box_pairs
+
+    image, target = vcoco[234]
+    draw_box_pairs(image, target['boxes_h'], target['boxes_o'], width=3)
+    image.save("output_image.jpg")
+    print(vcoco.get_hoi_class_name(234))
