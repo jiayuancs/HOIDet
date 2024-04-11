@@ -8,6 +8,7 @@ import numpy as np
 
 from typing import Optional, List, Callable, Tuple
 from hoidet.dataset.base import DatasetInfo, DatasetBase
+from hoidet.dataset.config import HICO_DET_INFO
 
 
 class HICODet(DatasetBase):
@@ -24,8 +25,8 @@ class HICODet(DatasetBase):
     """
 
     def __init__(self,
-                 dataset_info: DatasetInfo,
                  partition: str,
+                 dataset_info: DatasetInfo = HICO_DET_INFO,
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  transforms: Optional[Callable] = None) -> None:
@@ -200,7 +201,7 @@ if __name__ == '__main__':
 
     print(hico_det_train)
 
-    from hoidet.visualization.visual import draw_box_pairs
+    from hoidet.visualization.box import draw_box_pairs
 
     image, target = hico_det_train[2]
     draw_box_pairs(image, target['boxes_h'], target['boxes_o'], width=3)

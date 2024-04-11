@@ -9,6 +9,7 @@ import numpy as np
 
 from typing import Optional, List, Callable, Tuple, Any, Dict
 from hoidet.dataset.base import DatasetInfo, DatasetBase
+from hoidet.dataset.config import VCOCO_INFO
 
 
 class VCOCO(DatasetBase):
@@ -31,8 +32,8 @@ class VCOCO(DatasetBase):
     """
 
     def __init__(self,
-                 dataset_info: DatasetInfo,
                  partition: str,
+                 dataset_info: DatasetInfo = VCOCO_INFO,
                  transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
                  transforms: Optional[Callable] = None) -> None:
@@ -159,7 +160,7 @@ if __name__ == '__main__':
 
     print(vcoco)
 
-    from hoidet.visualization.visual import draw_box_pairs
+    from hoidet.visualization.box import draw_box_pairs
 
     image, target = vcoco[234]
     draw_box_pairs(image, target['boxes_h'], target['boxes_o'], width=3)
