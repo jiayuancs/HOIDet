@@ -273,6 +273,14 @@ class HICODet(ImageDataset):
         """Return the size (width, height) of an image"""
         return self._image_sizes[self._idx[idx]]
 
+    def get_hoi_name(self, idx: int) -> List[str]:
+        """返回第idx个样本中的所有HOI文本标签"""
+        hoi_name_list = []
+        idx = self._idx[idx]
+        for verb, obj in zip(self._anno[idx]['verb'], self._anno[idx]['object']):
+            hoi_name_list.append(f"{self._verbs[verb]} {self._objects[obj]}")
+        return hoi_name_list
+
     def _load_annotation_and_metadata(self, f: dict) -> None:
         """
         Arguments:
@@ -297,6 +305,15 @@ class HICODet(ImageDataset):
         self._empty_idx = f['empty']
         self._objects = f['objects']
         self._verbs = f['verbs']
+
+        # HICO-DET 边界框坐标范围是 [1, W] 或 [1,H]，其中 (W,H) 是图像宽高，
+        # 现将其范围变为 [0, W] 或 [0, H]（即zero-based index）
+        for i in range(len(self._anno)):
+            for j in range(len(self._anno[i]['boxes_h'])):
+                self._anno[i]['boxes_h'][j][0] -= 1
+                self._anno[i]['boxes_h'][j][1] -= 1
+                self._anno[i]['boxes_o'][j][0] -= 1
+                self._anno[i]['boxes_o'][j][1] -= 1
 
 
 if __name__ == '__main__':
