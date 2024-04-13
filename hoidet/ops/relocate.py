@@ -18,7 +18,17 @@ GenericTensor = TypeVar('GenericTensor', Tensor, List[Tensor], Tuple[Tensor, ...
 
 
 def relocate_to_cpu(x: GenericTensor, ignore: bool = False) -> GenericTensor:
-    """Relocate data to cpu recursively"""
+    """
+    将Tensor、list、dict、tuple等类型的数据迁移到CPU上
+
+    Args:
+        x: 待迁移的数据
+        ignore: 默认为False，表示当输入x是不支持的类型时，抛出异常；
+                如果为True，则表示当输入x是不支持的类型时，忽略本次操作，do nothing
+
+    Returns: 返回迁移到CPU上的数据
+
+    """
     if isinstance(x, Tensor):
         return x.cpu()
     elif x is None:
@@ -41,18 +51,19 @@ def relocate_to_cuda(
         **kwargs
 ) -> GenericTensor:
     """
-    Relocate data to CUDA recursively
+    将Tensor、list、dict、tuple等类型的数据迁移到GPU上
     
     Parameters:
     -----------
     x: Tensor, List[Tensor], Tuple[Tensor] or Dict[Tensor]
-        Generic tensor data to be relocated
+        待迁移的数据
     ignore: bool
-        If True, ignore unsupported data type and throw a warning.
+        默认为False，表示当输入x是不支持的类型时，抛出异常；
+        如果为True，则表示当输入x是不支持的类型时，忽略本次操作，do nothing
     device: torch.device or int
-        Destination device
+        GPU设备，可以是 torch.device 或者是 GPU 编号（从0开始）
     kwargs: dict
-        Refer to torch.Tensor.cuda() for keyworded arguments
+        用以 torch.Tensor.cuda() 的其他参数，很少使用
 
     Returns:
     --------
@@ -81,18 +92,19 @@ def relocate_to_device(
         **kwargs
 ) -> GenericTensor:
     """
-    Relocate data to specified device recursively
+    将Tensor、list、dict、tuple等类型的数据迁移到指定设备上
     
     Parameters:
     -----------
     x: Tensor, List[Tensor], Tuple[Tensor] or Dict[Tensor]
-        Generic tensor data to be relocated
+        待迁移的数据
+    ignore: bool
+        默认为False，表示当输入x是不支持的类型时，抛出异常；
+        如果为True，则表示当输入x是不支持的类型时，忽略本次操作，do nothing
     device: torch.device, str or int
         Destination device
-    ignore: bool
-        If True, ignore unsupported data type and throw a warning.
     kwargs: dict
-        Refer to torch.Tensor.to() for keyworded arguments
+        用以 torch.Tensor.cuda() 的其他参数，很少使用
 
     Returns:
     --------
