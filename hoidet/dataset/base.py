@@ -145,6 +145,8 @@ class DatasetBase(Dataset):
         self._image_sizes = None
         self._filenames = None
 
+        self._image_id_to_index = dict()
+
     def __len__(self):
         return len(self._filenames)
 
@@ -194,6 +196,14 @@ class DatasetBase(Dataset):
     def filenames(self) -> List[str]:
         """返回所有图片名称列表"""
         return self._filenames
+
+    def get_image_ids(self, idx: int) -> int:
+        """返回指定索引图片的ID（即图片名称中的数字）"""
+        return self._anno[idx]['image_id']
+
+    def get_index(self, image_id: int) -> int:
+        """获取指定图片ID在该数据集中的索引，返回-1表示该图片ID不存在"""
+        return self._image_id_to_index[image_id] if image_id in self._image_id_to_index.keys() else -1
 
     def get_hoi_class_name(self, idx: int) -> List[str]:
         """返回第idx个图片中所有的HOI文本标签"""

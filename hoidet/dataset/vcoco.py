@@ -64,6 +64,7 @@ class VCOCO(DatasetBase):
             The annotation associated with the given image. By default, when
             relevant transform arguments are None, the taget is a dict with the
             following keys:
+                image_id: int
                 boxes_h: List[list]
                     Human bouding boxes in a human-object pair encoded as the top
                     left and bottom right corners
@@ -106,10 +107,6 @@ class VCOCO(DatasetBase):
                     object_to_verb_dict[o].append(verb)
         return object_to_verb_dict
 
-    def coco_image_id(self, idx: int) -> int:
-        """Return the COCO image ID"""
-        return self._coco_image_ids[idx]
-
     def _load_annotation_and_metadata(self) -> None:
         with open(self.anno_path, 'r') as fd:
             f = json.load(fd)
@@ -138,13 +135,22 @@ class VCOCO(DatasetBase):
 
         # 删除不包含任何人物对的样本
         self._anno = [f['annotations'][idx] for idx in keep]  # List[dict]，每张图片的所有标注信息
-        self._coco_image_ids = [f['coco_image_id'][idx] for idx in keep]  # 图片在coco数据集中的编号
+        image_ids = [f['coco_image_id'][idx] for idx in keep]  # 图片在coco数据集中的编号
         self._image_sizes = [f['size'][idx] for idx in keep]  # 图片大小
         self._filenames = [f['filenames'][idx] for idx in keep]  # 图片名称
 
         self._verbs = f['verbs']  # 每个动作的名称
         self._objects = f['objects']  # 每个目标的名称
         self._verb_to_object = f['verb_to_object']  # 每个动作可对应的目标列表
+
+        # 添加 image_id 字段
+        for idx, anno in enumerate(self._anno):
+            anno['image_id'] = image_ids[idx]
+
+        # 计算 image_id 到样本索引的映射
+        self._image_id_to_index = dict()
+        for index, img_id in enumerate(image_ids):
+            self._image_id_to_index[img_id] = index
 
         # VCOCO 边界框坐标范围是 [0, W] 或 [0, H]，其中 (W,H) 是图像宽高.
         # 已经是 zero-based index，故不进行转换

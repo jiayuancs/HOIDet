@@ -51,6 +51,7 @@ class HICODet(DatasetBase):
         Returns:
             tuple[image, target]: By default, the tuple consists of a PIL image and a
                 dict with the following keys:
+                    "image_id": int
                     "boxes_h": list[list[4]]
                     "boxes_o": list[list[4]]
                     "hoi":: list[N]
@@ -181,6 +182,18 @@ class HICODet(DatasetBase):
         self._objects = f['objects']
         self._verbs = f['verbs']
 
+        # 计算图片ID
+        image_ids = [int(img_name.split('_')[-1].split('.')[0]) for img_name in self._filenames]
+
+        # 添加 image_id 字段
+        for idx, anno in enumerate(self._anno):
+            anno['image_id'] = image_ids[idx]
+
+        # 图片ID到索引的映射
+        self._image_id_to_index = dict()
+        for index, img_id in enumerate(image_ids):
+            self._image_id_to_index[img_id] = index
+
         # HICO-DET 边界框坐标范围是 [1, W] 或 [1,H]，其中 (W,H) 是图像宽高，
         # 现将其范围变为 [0, W] 或 [0, H]（即zero-based index）
         for i in range(len(self._anno)):
@@ -201,7 +214,7 @@ if __name__ == '__main__':
 
     print(hico_det_train)
 
-    from hoidet.visualization.box import draw_box_pairs
+    from hoidet.visualization import draw_box_pairs
 
     image, target = hico_det_train[2]
     draw_box_pairs(image, target['boxes_h'], target['boxes_o'], width=3)
