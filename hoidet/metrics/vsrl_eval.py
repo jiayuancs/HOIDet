@@ -80,7 +80,7 @@ class VCOCOeval(object):
 
     def _prep_vcocodb_entry(self, entry):
         entry['boxes'] = np.empty((0, 4), dtype=np.float32)
-        entry['is_crowd'] = np.empty((0), dtype=np.bool)
+        entry['is_crowd'] = np.empty((0), dtype=np.bool_)
         entry['gt_classes'] = np.empty((0), dtype=np.int32)
         entry['gt_actions'] = np.empty((0, self.num_actions), dtype=np.int32)
         entry['gt_role_id'] = np.empty((0, self.num_actions, 2), dtype=np.int32)
@@ -220,7 +220,7 @@ class VCOCOeval(object):
                 for rid in range(len(self.roles[aid]) - 1):
 
                     # keep track of detected instances for each action for each role
-                    covered = np.zeros((gt_boxes.shape[0]), dtype=np.bool)
+                    covered = np.zeros((gt_boxes.shape[0]), dtype=np.bool_)
 
                     # get gt roles for action and role
                     gt_role_inds = vcocodb[i]['gt_role_id'][gt_inds, aid, rid]
@@ -346,7 +346,7 @@ class VCOCOeval(object):
             for aid in range(self.num_actions):
 
                 # keep track of detected instances for each action
-                covered = np.zeros((gt_boxes.shape[0]), dtype=np.bool)
+                covered = np.zeros((gt_boxes.shape[0]), dtype=np.bool_)
 
                 agent_scores = pred_agents[:, 4 + aid]
                 agent_boxes = pred_agents[:, :4]
