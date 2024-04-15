@@ -18,11 +18,10 @@
 
 import numpy as np
 from pycocotools.coco import COCO
-import os, json
+import json
 import copy
 import pickle
-import pdb
-
+from tqdm import tqdm
 
 class VCOCOeval(object):
 
@@ -33,32 +32,39 @@ class VCOCOeval(object):
         coco_annot_file: path to the coco annotations
         split_file: image ids for split
         """
-        self.COCO = COCO(coco_annot_file)
+        self.COCO = COCO(coco_annot_file)  # 所有V-COCO图片标注数据
         self.VCOCO = _load_vcoco(vsrl_annot_file)
         self.image_ids = np.loadtxt(open(split_file, 'r'))
         # simple check
         assert np.all(np.equal(np.sort(np.unique(self.VCOCO[0]['image_id'])), self.image_ids))
 
+        # TODO: 发现这里存储了很多完全一样的字段，待优化
+        for i in range(len(self.VCOCO)):
+            assert np.all(np.equal(self.VCOCO[0]['image_id'], self.VCOCO[i]['image_id']))
+            assert np.all(np.equal(self.VCOCO[0]['ann_id'], self.VCOCO[i]['ann_id']))
+            assert np.all(np.equal(self.VCOCO[0]['image_id'], self.VCOCO[i]['image_id']))
+            assert np.max(self.VCOCO[i]['label']) == 1
+
         self._init_coco()
         self._init_vcoco()
 
     def _init_vcoco(self):
-        actions = [x['action_name'] for x in self.VCOCO]
-        roles = [x['role_name'] for x in self.VCOCO]
+        actions = [x['action_name'] for x in self.VCOCO]  # 26 个动作名称列表
+        roles = [x['role_name'] for x in self.VCOCO]  # 26 个动作对应的角色
         self.actions = actions
         self.actions_to_id_map = {v: i for i, v in enumerate(self.actions)}
-        self.num_actions = len(self.actions)
+        self.num_actions = len(self.actions)  # 26
         self.roles = roles
 
     def _init_coco(self):
-        category_ids = self.COCO.getCatIds()
-        categories = [c['name'] for c in self.COCO.loadCats(category_ids)]
-        self.category_to_id_map = dict(zip(categories, category_ids))
-        self.classes = ['__background__'] + categories
-        self.num_classes = len(self.classes)
-        self.json_category_id_to_contiguous_id = {
+        category_ids = self.COCO.getCatIds()  # 80 个物体类别编号，范围是[1, 90]
+        categories = [c['name'] for c in self.COCO.loadCats(category_ids)]  # 80 个物体类别文本标签
+        self.category_to_id_map = dict(zip(categories, category_ids))  # 文本到类别编号
+        self.classes = ['__background__'] + categories  # 添加一个背景类别
+        self.num_classes = len(self.classes)  # 81
+        self.json_category_id_to_contiguous_id = {  # 将COCO的 80 个类别标签从 [1,90] 映射到 [1, 80]。0 保留给背景类别
             v: i + 1 for i, v in enumerate(self.COCO.getCatIds())}
-        self.contiguous_category_id_to_json_id = {
+        self.contiguous_category_id_to_json_id = {  # 从 [1,80] 映射回 [1,90] 范围的 coco 标签
             v: k for k, v in self.json_category_id_to_contiguous_id.items()}
 
     def _get_vcocodb(self):
@@ -179,29 +185,69 @@ class VCOCOeval(object):
                 roles = np.concatenate((roles, this_role), axis=0)
         return agents, roles
 
+    def _pre_collect_detections_for_image(self, dets):
+        """预先收集好每张图片的检测结果，从而避免调用_collect_detections_for_image方法，以优化性能"""
+        agents = dict()
+        roles = dict()
+        for det in tqdm(dets):
+            image_id = det['image_id']
+            this_agent = np.zeros((1, 4 + self.num_actions), dtype=np.float32)
+            this_role = np.zeros((1, 5 * self.num_actions, 2), dtype=np.float32)
+            this_agent[0, :4] = det['person_box']
+            for aid in range(self.num_actions):
+                for j, rid in enumerate(self.roles[aid]):
+                    if rid == 'agent':
+                        this_agent[0, 4 + aid] = det[self.actions[aid] + '_' + rid]
+                    else:
+                        this_role[0, 5 * aid: 5 * aid + 5, j - 1] = det[self.actions[aid] + '_' + rid]
+
+            if image_id not in agents.keys():
+                assert image_id not in roles.keys()
+                agents[image_id] = [this_agent]
+                roles[image_id] = [this_role]
+            else:
+                agents[image_id].append(this_agent)
+                roles[image_id].append(this_role)
+
+        self._detection_agents_for_image = dict()
+        self._detection_roles_for_image = dict()
+        for key in agents.keys():
+            self._detection_agents_for_image[key] = np.concatenate(agents[key], axis=0)
+            self._detection_roles_for_image[key] = np.concatenate(roles[key], axis=0)
+
+        # 验证是否正确
+        # print("Checking...")
+        # for key in tqdm(agents.keys()):
+        #     pred_agents, pred_roles = self._collect_detections_for_image(dets, key)
+        #     assert np.all(pred_agents == self._detection_agents_for_image[key])
+        #     assert np.all(pred_roles == self._detection_roles_for_image[key])
+        # print("Check: OK")
+
     def _do_eval(self, detections_file, ovr_thresh=0.5):
         vcocodb = self._get_vcocodb()
-        self._do_agent_eval(vcocodb, detections_file, ovr_thresh=ovr_thresh)
-        self._do_role_eval(vcocodb, detections_file, ovr_thresh=ovr_thresh, eval_type='scenario_1')
-        self._do_role_eval(vcocodb, detections_file, ovr_thresh=ovr_thresh, eval_type='scenario_2')
-
-    def _do_role_eval(self, vcocodb, detections_file, ovr_thresh=0.5, eval_type='scenario_1'):
+        # self._do_agent_eval(vcocodb, detections_file, ovr_thresh=ovr_thresh)
 
         with open(detections_file, 'rb') as f:
             dets = pickle.load(f)
+        self._pre_collect_detections_for_image(dets)
+
+        self._do_role_eval(vcocodb, dets, ovr_thresh=ovr_thresh, eval_type='scenario_1')
+        self._do_role_eval(vcocodb, dets, ovr_thresh=ovr_thresh, eval_type='scenario_2')
+
+    def _do_role_eval(self, vcocodb, dets, ovr_thresh=0.5, eval_type='scenario_1'):
 
         tp = [[[] for r in range(2)] for a in range(self.num_actions)]
         fp = [[[] for r in range(2)] for a in range(self.num_actions)]
         sc = [[[] for r in range(2)] for a in range(self.num_actions)]
 
-        npos = np.zeros((self.num_actions), dtype=np.float32)
+        npos = np.zeros((self.num_actions), dtype=np.float32)  # npos[i] 表示第 i 个动作有多少个实例
 
-        for i in range(len(vcocodb)):
+        for i in tqdm(range(len(vcocodb))):
             image_id = vcocodb[i]['id']
-            gt_inds = np.where(vcocodb[i]['gt_classes'] == 1)[0]
+            gt_inds = np.where(vcocodb[i]['gt_classes'] == 1)[0]  # person的标签编号是1，这里是为了得到人框的索引
             # person boxes
-            gt_boxes = vcocodb[i]['boxes'][gt_inds]
-            gt_actions = vcocodb[i]['gt_actions'][gt_inds]
+            gt_boxes = vcocodb[i]['boxes'][gt_inds]  # 人框
+            gt_actions = vcocodb[i]['gt_actions'][gt_inds]  # 人框对应的动作类别（一个人框可能有多个动作）, -1 表示没有任何动作
             # some peorson instances don't have annotated actions
             # we ignore those instances
             ignore = np.any(gt_actions == -1, axis=1)
@@ -210,7 +256,13 @@ class VCOCOeval(object):
             for aid in range(self.num_actions):
                 npos[aid] += np.sum(gt_actions[:, aid] == 1)
 
-            pred_agents, pred_roles = self._collect_detections_for_image(dets, image_id)
+            # pred_agents, pred_roles = self._collect_detections_for_image(dets, image_id)
+            if image_id not in self._detection_agents_for_image.keys():
+                pred_agents = np.empty((0, 4 + self.num_actions), dtype=np.float32)
+                pred_roles = np.empty((0, 5 * self.num_actions, 2), dtype=np.float32)
+            else:
+                pred_agents = self._detection_agents_for_image[image_id]
+                pred_roles = self._detection_roles_for_image[image_id]
 
             for aid in range(self.num_actions):
                 if len(self.roles[aid]) < 2:
@@ -315,101 +367,6 @@ class VCOCOeval(object):
                 print('{: >23}: AP = {:0.2f} (#pos = {:d})'.format(self.actions[aid] + '-' + self.roles[aid][rid + 1],
                                                                    role_ap[aid, rid] * 100.0, int(npos[aid])))
         print('Average Role [%s] AP = %.2f' % (eval_type, np.nanmean(role_ap) * 100.00))
-        print('---------------------------------------------')
-
-    def _do_agent_eval(self, vcocodb, detections_file, ovr_thresh=0.5):
-
-        with open(detections_file, 'rb') as f:
-            dets = pickle.load(f)
-
-        tp = [[] for a in range(self.num_actions)]
-        fp = [[] for a in range(self.num_actions)]
-        sc = [[] for a in range(self.num_actions)]
-
-        npos = np.zeros((self.num_actions), dtype=np.float32)
-
-        for i in range(len(vcocodb)):
-            image_id = vcocodb[i]['id']
-            gt_inds = np.where(vcocodb[i]['gt_classes'] == 1)[0]
-            # person boxes
-            gt_boxes = vcocodb[i]['boxes'][gt_inds]
-            gt_actions = vcocodb[i]['gt_actions'][gt_inds]
-            # some peorson instances don't have annotated actions
-            # we ignore those instances
-            ignore = np.any(gt_actions == -1, axis=1)
-
-            for aid in range(self.num_actions):
-                npos[aid] += np.sum(gt_actions[:, aid] == 1)
-
-            pred_agents, _ = self._collect_detections_for_image(dets, image_id)
-
-            for aid in range(self.num_actions):
-
-                # keep track of detected instances for each action
-                covered = np.zeros((gt_boxes.shape[0]), dtype=np.bool_)
-
-                agent_scores = pred_agents[:, 4 + aid]
-                agent_boxes = pred_agents[:, :4]
-                # remove NaNs
-                valid = np.where(np.isnan(agent_scores) == False)[0]
-                agent_scores = agent_scores[valid]
-                agent_boxes = agent_boxes[valid, :]
-
-                # sort in descending order
-                idx = agent_scores.argsort()[::-1]
-
-                for j in idx:
-                    pred_box = agent_boxes[j, :]
-                    overlaps = get_overlap(gt_boxes, pred_box)
-
-                    jmax = overlaps.argmax()
-                    ovmax = overlaps.max()
-
-                    # if matched with an instance with no annotations
-                    # continue
-                    if ignore[jmax]:
-                        continue
-
-                    is_true_action = (gt_actions[jmax, aid] == 1)
-
-                    sc[aid].append(agent_scores[j])
-                    if is_true_action and (ovmax >= ovr_thresh):
-                        if covered[jmax]:
-                            fp[aid].append(1)
-                            tp[aid].append(0)
-                        else:
-                            fp[aid].append(0)
-                            tp[aid].append(1)
-                            covered[jmax] = True
-                    else:
-                        fp[aid].append(1)
-                        tp[aid].append(0)
-
-        # compute ap for each action
-        agent_ap = np.zeros((self.num_actions), dtype=np.float32)
-        for aid in range(self.num_actions):
-            a_fp = np.array(fp[aid], dtype=np.float32)
-            a_tp = np.array(tp[aid], dtype=np.float32)
-            a_sc = np.array(sc[aid], dtype=np.float32)
-            # sort in descending score order
-            idx = a_sc.argsort()[::-1]
-            a_fp = a_fp[idx]
-            a_tp = a_tp[idx]
-            a_sc = a_sc[idx]
-
-            a_fp = np.cumsum(a_fp)
-            a_tp = np.cumsum(a_tp)
-            rec = a_tp / float(npos[aid])
-            # check
-            assert (np.amax(rec) <= 1)
-            prec = a_tp / np.maximum(a_tp + a_fp, np.finfo(np.float64).eps)
-            agent_ap[aid] = voc_ap(rec, prec)
-
-        print('---------Reporting Agent AP (%)------------------')
-        for aid in range(self.num_actions):
-            print(
-                '{: >20}: AP = {:0.2f} (#pos = {:d})'.format(self.actions[aid], agent_ap[aid] * 100.0, int(npos[aid])))
-        print('Average Agent AP = %.2f' % (np.nansum(agent_ap) * 100.00 / self.num_actions))
         print('---------------------------------------------')
 
 
