@@ -53,12 +53,14 @@ class HICODetResultTemplate:
 class HICODetMetric:
     def __init__(self, pred_file_path: str,
                  partition: str = "test2015",
+                 partition_for_rare: str = "train2015",
                  dataset_info: DatasetInfo = HICO_DET_INFO,
                  tp_min_iou: float = 0.5):
         """
         Args:
             pred_file_path: 模型在partition分区上的预测结果文件路径
-            partition: 指定数据集分区
+            partition: 指定要测试的数据集分区
+            partition_for_rare: 指定用于统计rare和non-rare类别的数据集分区
             dataset_info: 数据集基本信息
             tp_min_iou: 当人框和物框与真实框IoU的最小值大于tp_min_iou，且预测的HOI类别正确时，被认为是 True Positive
         """
@@ -70,6 +72,10 @@ class HICODetMetric:
         self.hicodet = HICODet(
             dataset_info=dataset_info,
             partition=partition
+        )
+        self.hicodet_for_rare = HICODet(
+            dataset_info=dataset_info,
+            partition=partition_for_rare
         )
 
         self.ap = None
@@ -122,14 +128,38 @@ class HICODetMetric:
     def get_full_map(self):
         return self.ap.mean()
 
-    def get_rare_map(self):
-        pass
+    def get_rare_map(self, hoi_class_num_threshold=10):
+        """
+        Args:
+            hoi_class_num_threshold: HOI类别实例个数阈值
+                小于该阈值的 HOI 类别被判定为 rare 类别
+                大于等于该阈值的 HOI 类别被判定为 non-rare 类别
 
-    def get_non_rare_map(self):
-        pass
+        Returns: float
+            返回 rare 类别的 mAP
+        """
+        num_anno = torch.as_tensor(self.hicodet_for_rare.hoi_instance_num)
+        rare = torch.nonzero(num_anno < hoi_class_num_threshold).squeeze(1)
+        return self.ap[rare].mean()
+
+    def get_non_rare_map(self, hoi_class_num_threshold=10):
+        """
+        Args:
+            hoi_class_num_threshold: HOI类别实例个数阈值
+                小于该阈值的 HOI 类别被判定为 rare 类别
+                大于等于该阈值的 HOI 类别被判定为 non-rare 类别
+
+        Returns: float
+            返回 non-rare 类别的 mAP
+        """
+        num_anno = torch.as_tensor(self.hicodet_for_rare.hoi_instance_num)
+        non_rare = torch.nonzero(num_anno >= hoi_class_num_threshold).squeeze(1)
+        return self.ap[non_rare].mean()
 
 
 if __name__ == '__main__':
     hicodet = HICODetMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/hicodet_pred.pkl")
     hicodet.eval()
-    print(f"mAP: {hicodet.get_full_map():0.4f}")
+    print(f"mAP: {hicodet.get_full_map():.4f}\n"
+          f"rare mAP: {hicodet.get_rare_map():.4f}\n"
+          f"non-rare mAP: {hicodet.get_non_rare_map():.4f}")

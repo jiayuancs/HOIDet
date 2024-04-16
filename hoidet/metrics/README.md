@@ -35,7 +35,9 @@ from hoidet.metrics import HICODetMetric
 
 hicodet = HICODetMetric(pred_file_path="/path/to/pred.pkl")
 hicodet.eval()  # 评测
-print(f"mAP: {hicodet.get_full_map():0.4f}")
+print(f"mAP: {hicodet.get_full_map():.4f}\n"
+      f"rare mAP: {hicodet.get_rare_map():.4f}\n"
+      f"non-rare mAP: {hicodet.get_non_rare_map():.4f}")
 ```
 
 ## V-COCO
