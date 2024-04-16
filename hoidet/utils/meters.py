@@ -23,7 +23,18 @@ __all__ = [
 
 
 def div(numerator: Tensor, denom: Union[Tensor, int, float]) -> Tensor:
-    """Handle division by zero"""
+    """
+    解决除数为0的问题：
+        如果除数是int或float，则计算结果为0；
+        如果除数是tensor，则为0的元素被替换为1e-8
+
+    Args:
+        numerator: 被除数
+        denom: 除数
+
+    Returns:
+
+    """
     if type(denom) in [int, float]:
         if denom == 0:
             return torch.zeros_like(numerator)
@@ -39,7 +50,19 @@ def div(numerator: Tensor, denom: Union[Tensor, int, float]) -> Tensor:
 
 class Meter:
     """
-    Base class
+    记录评价指标值的工具，基于双端队列deque，当想deque中添加超过maxlen个数的元素时，
+    最左端的元素会被弹出。
+
+    示例：
+        # 最大长度为3
+        Meter meter(3)
+
+        meter.append(1)
+        meter.append(2)
+        meter.append(3)  # 此时容器的内容为：[1,2,3]
+
+        # 再添加一个元素，超出最大长度，导致最左端的元素被弹出
+        meter.append(1)  # 此时容器的内容为：[2,3,4]
     """
 
     def __init__(self, maxlen: Optional[int] = None) -> None:
@@ -94,7 +117,7 @@ class Meter:
 
 class NumericalMeter(Meter):
     """
-    Meter class with numerals as elements
+    记录数值型的评价指标值的容器，仅支持存储int和float
     """
     VALID_TYPES = [int, float]
 
@@ -169,7 +192,7 @@ class AveragePrecisionMeter:
         labels(tensor[N, K], optinoal): Binary labels
 
     Usage:
-        
+
     (1) Evalute AP using provided output scores and labels
 
         >>> # Given output(tensor[N, K]) and labels(tensor[N, K])
@@ -214,7 +237,7 @@ class AveragePrecisionMeter:
     @staticmethod
     def compute_per_class_ap_as_auc(tuple_: Tuple[Tensor, Tensor]) -> Tensor:
         """
-        Arguments: 
+        Arguments:
             tuple_(Tuple[Tensor, Tensor]): precision and recall
         Returns:
             ap(Tensor[1])
@@ -282,7 +305,7 @@ class AveragePrecisionMeter:
                    algorithm: str = 'AUC',
                    chunksize: int = -1) -> Tensor:
         """
-        Compute average precision under the classification setting. Scores of all 
+        Compute average precision under the classification setting. Scores of all
         classes are retained for each sample.
 
         Arguments:
@@ -503,7 +526,7 @@ class DetectionAPMeter:
     def compute_ap(cls, output: List[Tensor], labels: List[Tensor],
                    num_gt: Iterable, nproc: int, algorithm: str = 'AUC') -> Tuple[Tensor, Tensor]:
         """
-        Compute average precision under the detection setting. Only scores of the 
+        Compute average precision under the detection setting. Only scores of the
         predicted classes are retained for each sample. As a result, different classes
         could have different number of predictions.
 
@@ -647,3 +670,9 @@ class DetectionAPMeter:
                                                 nproc=self._nproc, algorithm=self.algorithm)
 
         return self.ap
+
+
+if __name__ == '__main__':
+    x = torch.tensor([1, 2, 3])
+    y = div(x, 0)
+    print(y)
