@@ -15,6 +15,28 @@
 import numpy as np
 import pickle
 from tqdm import tqdm
+from collections import defaultdict
+
+
+class CacheTemplate(defaultdict):
+    """
+    https://github.com/fredzzhang/upt/blob/main/utils.py
+    A template for VCOCO cached results
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        for k, v in kwargs.items():
+            self[k] = v
+
+    def __missing__(self, k):
+        seg = k.split('_')
+        # Assign zero score to missing actions
+        if seg[-1] == 'agent':
+            return 0.
+        # Assign zero score and a tiny box to missing <action,role> pairs
+        else:
+            return [0., 0., .1, .1, 0.]
 
 
 class VCOCOeval:
@@ -29,7 +51,13 @@ class VCOCOeval:
         self.roles = eval_target["roles"]
         self.actions = eval_target["actions"]
 
-        self._pre_collect_detections_for_image(preds)
+        # 转换为 CacheTemplate 类型的字典，从而当键不存在时返回特定值
+        preds_cache = []
+        for pred in preds:
+            tmp = CacheTemplate()
+            tmp.update(pred)
+            preds_cache.append(tmp)
+        self._pre_collect_detections_for_image(preds_cache)
 
     def _pre_collect_detections_for_image(self, dets):
         """预先收集好每张图片的检测结果，从而避免调用_collect_detections_for_image方法，以优化性能"""

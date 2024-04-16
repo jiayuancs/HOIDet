@@ -1,14 +1,53 @@
 """
 测试 HOI detection 模型在 HICO-DET 数据集上的性能
 """
-import json
 import torch
+import pickle
+from torch import Tensor
 from tqdm import tqdm
 
 from hoidet.dataset import HICO_DET_INFO, DatasetInfo, HICODet
 from hoidet.utils import BoxPairAssociation, DetectionAPMeter
 
-__all__ = ['HICODetMetric']
+__all__ = ['HICODetMetric', 'HICODetResultTemplate']
+
+
+class HICODetResultTemplate:
+    """保存HOI检测模型的预测结果"""
+
+    def __init__(self):
+        self.results = []
+
+    def append(self,
+               image_id: int,
+               boxes: Tensor,
+               human_box_idx: Tensor,
+               object_box_idx: Tensor,
+               hoi_score: Tensor,
+               hoi_class: Tensor):
+        """
+        添加预测结果
+        Args:
+            image_id: 图片编号（即图片名称中的数字）
+            boxes: 该图片中所有边界框的坐标，格式为[(x1,y1,x2,y2), ...]
+            human_box_idx: human_box_idx[i]表示第i个 human-object pair 中，人的边界框在 boxes 中的索引
+            object_box_idx: object_box_idx[i]表示第i个 human-object pair 中，物的边界框在 boxes 中的索引
+            hoi_score: 表示第 i 个 human-object pair 的置信度分数
+            hoi_class: 表示第 i 个 human-object pair 的 HOI 类别编号（注意：不是动词类别编号）
+        """
+        self.results.append({
+            'image_id': image_id,
+            'boxes': boxes.tolist(),
+            'h_idx': human_box_idx.tolist(),
+            'o_idx': object_box_idx.tolist(),
+            'hoi_score': hoi_score.tolist(),
+            'hoi_class': hoi_class.int().tolist()
+        })
+
+    def save(self, file_path):
+        """将结果保存到file_path文件中"""
+        with open(file_path, mode='wb') as fd:
+            pickle.dump(self.results, fd)
 
 
 class HICODetMetric:
@@ -25,8 +64,8 @@ class HICODetMetric:
         """
         self.tp_min_iou = tp_min_iou
 
-        with open(pred_file_path, mode="r", encoding='utf-8') as fd:
-            self.preds = json.load(fd)
+        with open(pred_file_path, "rb") as fd:
+            self.preds = pickle.load(fd)
 
         self.hicodet = HICODet(
             dataset_info=dataset_info,
@@ -91,6 +130,6 @@ class HICODetMetric:
 
 
 if __name__ == '__main__':
-    hicodet = HICODetMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/hicodet_pred.json")
+    hicodet = HICODetMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/hicodet_pred.pkl")
     hicodet.eval()
     print(f"mAP: {hicodet.get_full_map():0.4f}")

@@ -1,10 +1,54 @@
 import os
+import pickle
 import numpy as np
+from typing import List
+from torch import Tensor
+
 
 from hoidet.metrics.vsrl_eval import VCOCOeval
 from hoidet.dataset import VCOCO_INFO, DatasetInfo
 
-__all__ = ['VCOCOMetric']
+__all__ = ['VCOCOMetric', 'VCOCOResultTemplate']
+
+
+class VCOCOResultTemplate:
+    """保存HOI检测模型的预测结果"""
+
+    def __init__(self):
+        self.results = []
+
+    def append(self,
+               image_id: int,
+               boxes: Tensor,
+               human_box_idx: Tensor,
+               object_box_idx: Tensor,
+               hoi_score: Tensor,
+               verb_class_names: List):
+        """
+        添加预测结果
+        Args:
+            image_id: 图片编号（即图片名称中的数字）
+            boxes: 该图片中所有边界框的坐标，格式为[(x1,y1,x2,y2), ...]
+            human_box_idx: human_box_idx[i]表示第i个 human-object pair 中，人的边界框在 boxes 中的索引
+            object_box_idx: object_box_idx[i]表示第i个 human-object pair 中，物的边界框在 boxes 中的索引
+            hoi_score: 表示第 i 个 human-object pair 的置信度分数
+            verb_class_names: 表示第 i 个 human-object pair 的**动作**类别名称（注意：不是HOI类别）
+        """
+
+        boxes_h = boxes[human_box_idx]
+        boxes_o = boxes[object_box_idx]
+
+        for box_h, box_o, score, verb in zip(boxes_h, boxes_o, hoi_score, verb_class_names):
+            action, role = verb.split()
+            res = dict(image_id=image_id, person_box=box_h.tolist())
+            res[f'{action}_agent'] = score.item()
+            res[f'{action}_{role}'] = box_o.tolist() + [score.item()]
+            self.results.append(res)
+
+    def save(self, file_path):
+        """将结果保存到file_path文件中"""
+        with open(file_path, mode='wb') as fd:
+            pickle.dump(self.results, fd)
 
 
 class VCOCOMetric:
@@ -88,11 +132,11 @@ class VCOCOMetric:
 
     def print_map(self, scenario: int):
         self.vcoco_eval.print_role_ap(self.get_ap(scenario), scenario)
-        print(f"Remove point-instr: Average Role [scenario_{scenario}] AP = {self.get_map(scenario)}")
+        print(f"Remove point-instr: Average Role [scenario_{scenario}] AP = {self.get_map(scenario):.4f}")
 
 
 if __name__ == "__main__":
-    vcoco = VCOCOMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/cache.pkl")
+    vcoco = VCOCOMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/vcoco_pred.pkl")
     vcoco.eval()  # 评测
     vcoco.print_map(1)
     vcoco.print_map(2)
