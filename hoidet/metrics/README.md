@@ -6,7 +6,7 @@
 
 模型在测试集上的预测结果按如下格式保存为 json 文件：
 
-```json
+```txt
 [
   {
     'image_id': int,
@@ -34,7 +34,7 @@
 from hoidet.metrics import HICODetMetric
 
 hicodet = HICODetMetric(pred_file_path="/path/to/pred.json")
-vcoco.eval()  # 评测
+hicodet.eval()  # 评测
 print(f"mAP: {hicodet.get_full_map():0.4f}")
 ```
 
@@ -44,7 +44,7 @@ print(f"mAP: {hicodet.get_full_map():0.4f}")
 
 列表中每个元素描述了一个 human-object pair。
 
-```json
+```txt
 [
    {
    'image_id': int,
