@@ -73,6 +73,14 @@ class VCOCOeval(object):
             self._prep_vcocodb_entry(entry)
             self._add_gt_annotations(entry)
 
+            # 移除不需要的字段
+            entry.pop("license")
+            entry.pop("file_name")
+            entry.pop("coco_url")
+            entry.pop("date_captured")
+            entry.pop("flickr_url")
+            entry.pop("is_crowd")
+
         # print
         if 0:
             nums = np.zeros((self.num_actions), dtype=np.int32)
@@ -95,8 +103,8 @@ class VCOCOeval(object):
         ann_ids = self.COCO.getAnnIds(imgIds=entry['id'], iscrowd=None)
         objs = self.COCO.loadAnns(ann_ids)
         # Sanitize bboxes -- some are invalid
-        valid_objs = []
-        valid_ann_ids = []
+        valid_objs = []  # valid_objs[i]是第i个box
+        valid_ann_ids = []  # valid_ann_ids[i]是第i个box的标注信息编号
         width = entry['width']
         height = entry['height']
         for i, obj in enumerate(objs):
@@ -129,6 +137,8 @@ class VCOCOeval(object):
             gt_classes[ix] = cls
             is_crowd[ix] = obj['iscrowd']
 
+            # gt_actions[ix]是第ix个box的动作类别，采用one-hot编码，1表示存在该动作，可能会存在多个动作
+            # gt_role_id[ix]是第ix个box的作用物box在COCO数据集中的注释编号
             gt_actions[ix, :], gt_role_id[ix, :, :] = \
                 self._get_vsrl_data(valid_ann_ids[ix],
                                     valid_ann_ids, valid_objs)
@@ -149,7 +159,7 @@ class VCOCOeval(object):
             action_id[:] = 0
             role_id[:] = -1
         else:
-            return action_id, role_id
+            return action_id, role_id  # 全为-1表示该边界框内没有任何交互动作
         for i, x in enumerate(self.VCOCO):
             assert x['action_name'] == self.actions[i]
             has_label = np.where(np.logical_and(x['ann_id'] == ann_id, x['label'] == 1))[0]
@@ -163,8 +173,8 @@ class VCOCOeval(object):
                         # no role
                         continue
                     aid = np.where(ann_ids == rids[0, j])[0]
-                    assert aid.size > 0
-                    role_id[i, j - 1] = aid
+                    assert aid.size == 1
+                    role_id[i, j - 1] = aid[0]
         return action_id, role_id
 
     def _collect_detections_for_image(self, dets, image_id):
@@ -224,6 +234,7 @@ class VCOCOeval(object):
         # print("Check: OK")
 
     def _do_eval(self, detections_file, ovr_thresh=0.5):
+        """弃用"""
         vcocodb = self._get_vcocodb()
         # self._do_agent_eval(vcocodb, detections_file, ovr_thresh=ovr_thresh)
 
@@ -231,10 +242,28 @@ class VCOCOeval(object):
             dets = pickle.load(f)
         self._pre_collect_detections_for_image(dets)
 
-        self._do_role_eval(vcocodb, dets, ovr_thresh=ovr_thresh, eval_type='scenario_1')
-        self._do_role_eval(vcocodb, dets, ovr_thresh=ovr_thresh, eval_type='scenario_2')
+        self._do_role_eval(vcocodb, ovr_thresh=ovr_thresh, eval_type='scenario_1')
+        self._do_role_eval(vcocodb, ovr_thresh=ovr_thresh, eval_type='scenario_2')
 
-    def _do_role_eval(self, vcocodb, dets, ovr_thresh=0.5, eval_type='scenario_1'):
+    def eval(self, detections_file, ovr_thresh=0.5):
+        """
+        同时计算Scenario 1和Scenario 2的role AP
+        Args:
+            detections_file: 模型预测结果
+            ovr_thresh:
+
+        Returns:
+
+        """
+        vcocodb = self._get_vcocodb()
+
+        with open(detections_file, 'rb') as f:
+            dets = pickle.load(f)
+        self._pre_collect_detections_for_image(dets)
+
+        self._do_role_eval_2(vcocodb, ovr_thresh=ovr_thresh)
+
+    def _do_role_eval(self, vcocodb, ovr_thresh=0.5, eval_type='scenario_1'):
 
         tp = [[[] for r in range(2)] for a in range(self.num_actions)]
         fp = [[[] for r in range(2)] for a in range(self.num_actions)]
@@ -254,15 +283,18 @@ class VCOCOeval(object):
             assert np.all(gt_actions[np.where(ignore == True)[0]] == -1)
 
             for aid in range(self.num_actions):
-                npos[aid] += np.sum(gt_actions[:, aid] == 1)
+                npos[aid] += np.sum(gt_actions[:, aid] == 1)  # 统计每个action的实例个数
 
             # pred_agents, pred_roles = self._collect_detections_for_image(dets, image_id)
             if image_id not in self._detection_agents_for_image.keys():
-                pred_agents = np.empty((0, 4 + self.num_actions), dtype=np.float32)
-                pred_roles = np.empty((0, 5 * self.num_actions, 2), dtype=np.float32)
+                pred_agents = None
+                pred_roles = None
             else:
                 pred_agents = self._detection_agents_for_image[image_id]
                 pred_roles = self._detection_roles_for_image[image_id]
+            if pred_roles is None:
+                # 如果模型在该图片上的预测结果为空，则没必要再执行如下代码
+                continue
 
             for aid in range(self.num_actions):
                 if len(self.roles[aid]) < 2:
@@ -305,6 +337,13 @@ class VCOCOeval(object):
                         if ignore[jmax]:
                             continue
 
+                        is_true_action = (gt_actions[jmax, aid] == 1)
+                        sc[aid][rid].append(agent_scores[j])
+                        if not (is_true_action and ovmax >= ovr_thresh):
+                            fp[aid][rid].append(1)
+                            tp[aid][rid].append(0)
+                            continue
+
                         # overlap between predicted role and gt role
                         if np.all(gt_roles[jmax, :] == -1):  # if no gt role
                             if eval_type == 'scenario_1':
@@ -322,9 +361,7 @@ class VCOCOeval(object):
                         else:
                             ov_role = get_overlap(gt_roles[jmax, :].reshape((1, 4)), role_boxes[j, :])
 
-                        is_true_action = (gt_actions[jmax, aid] == 1)
-                        sc[aid][rid].append(agent_scores[j])
-                        if is_true_action and (ovmax >= ovr_thresh) and (ov_role >= ovr_thresh):
+                        if ov_role >= ovr_thresh:
                             if covered[jmax]:
                                 fp[aid][rid].append(1)
                                 tp[aid][rid].append(0)
@@ -336,29 +373,31 @@ class VCOCOeval(object):
                             fp[aid][rid].append(1)
                             tp[aid][rid].append(0)
 
-        # compute ap for each action
-        role_ap = np.zeros((self.num_actions, 2), dtype=np.float32)
-        role_ap[:] = np.nan
-        for aid in range(self.num_actions):
-            if len(self.roles[aid]) < 2:
-                continue
-            for rid in range(len(self.roles[aid]) - 1):
-                a_fp = np.array(fp[aid][rid], dtype=np.float32)
-                a_tp = np.array(tp[aid][rid], dtype=np.float32)
-                a_sc = np.array(sc[aid][rid], dtype=np.float32)
-                # sort in descending score order
-                idx = a_sc.argsort()[::-1]
-                a_fp = a_fp[idx]
-                a_tp = a_tp[idx]
-                a_sc = a_sc[idx]
+        role_ap = _compute_role_ap(self.num_actions, self.roles, fp, tp, sc, npos)
 
-                a_fp = np.cumsum(a_fp)
-                a_tp = np.cumsum(a_tp)
-                rec = a_tp / float(npos[aid])
-                # check
-                assert (np.amax(rec) <= 1)
-                prec = a_tp / np.maximum(a_tp + a_fp, np.finfo(np.float64).eps)
-                role_ap[aid, rid] = voc_ap(rec, prec)
+        # # compute ap for each action
+        # role_ap = np.zeros((self.num_actions, 2), dtype=np.float32)
+        # role_ap[:] = np.nan
+        # for aid in range(self.num_actions):
+        #     if len(self.roles[aid]) < 2:
+        #         continue
+        #     for rid in range(len(self.roles[aid]) - 1):
+        #         a_fp = np.array(fp[aid][rid], dtype=np.float32)
+        #         a_tp = np.array(tp[aid][rid], dtype=np.float32)
+        #         a_sc = np.array(sc[aid][rid], dtype=np.float32)
+        #         # sort in descending score order
+        #         idx = a_sc.argsort()[::-1]
+        #         a_fp = a_fp[idx]
+        #         a_tp = a_tp[idx]
+        #         a_sc = a_sc[idx]
+        #
+        #         a_fp = np.cumsum(a_fp)
+        #         a_tp = np.cumsum(a_tp)
+        #         rec = a_tp / float(npos[aid])
+        #         # check
+        #         assert (np.amax(rec) <= 1)
+        #         prec = a_tp / np.maximum(a_tp + a_fp, np.finfo(np.float64).eps)
+        #         role_ap[aid, rid] = voc_ap(rec, prec)
 
         print('---------Reporting Role AP (%)------------------')
         for aid in range(self.num_actions):
@@ -368,6 +407,195 @@ class VCOCOeval(object):
                                                                    role_ap[aid, rid] * 100.0, int(npos[aid])))
         print('Average Role [%s] AP = %.2f' % (eval_type, np.nanmean(role_ap) * 100.00))
         print('---------------------------------------------')
+        return role_ap
+
+    def _do_role_eval_2(self, vcocodb, ovr_thresh=0.5):
+
+        # scenario_1
+        tp_1 = [[[] for r in range(2)] for a in range(self.num_actions)]
+        fp_1 = [[[] for r in range(2)] for a in range(self.num_actions)]
+        sc_1 = [[[] for r in range(2)] for a in range(self.num_actions)]
+        # scenario_2
+        tp_2 = [[[] for r in range(2)] for a in range(self.num_actions)]
+        fp_2 = [[[] for r in range(2)] for a in range(self.num_actions)]
+        sc_2 = [[[] for r in range(2)] for a in range(self.num_actions)]
+
+        npos = np.zeros((self.num_actions), dtype=np.float32)  # npos[i] 表示第 i 个动作有多少个实例
+
+        for i in tqdm(range(len(vcocodb))):
+            image_id = vcocodb[i]['id']
+            gt_inds = np.where(vcocodb[i]['gt_classes'] == 1)[0]  # person的标签编号是1，这里是为了得到人框的索引
+            # person boxes
+            gt_boxes = vcocodb[i]['boxes'][gt_inds]  # 人框
+            gt_actions = vcocodb[i]['gt_actions'][gt_inds]  # 人框对应的动作类别（一个人框可能有多个动作）, -1 表示没有任何动作
+            # some peorson instances don't have annotated actions
+            # we ignore those instances
+            ignore = np.any(gt_actions == -1, axis=1)
+            assert np.all(gt_actions[np.where(ignore == True)[0]] == -1)
+
+            for aid in range(self.num_actions):
+                npos[aid] += np.sum(gt_actions[:, aid] == 1)  # 统计每个action的实例个数
+
+            # pred_agents, pred_roles = self._collect_detections_for_image(dets, image_id)
+            if image_id not in self._detection_agents_for_image.keys():
+                pred_agents = None
+                pred_roles = None
+            else:
+                pred_agents = self._detection_agents_for_image[image_id]
+                pred_roles = self._detection_roles_for_image[image_id]
+            if pred_roles is None:
+                # 如果模型在该图片上的预测结果为空，则没必要再执行如下代码
+                continue
+
+            for aid in range(self.num_actions):
+                if len(self.roles[aid]) < 2:
+                    # if action has no role, then no role AP computed
+                    continue
+
+                for rid in range(len(self.roles[aid]) - 1):
+
+                    # get gt roles for action and role
+                    gt_role_inds = vcocodb[i]['gt_role_id'][gt_inds, aid, rid]
+                    gt_roles = -np.ones_like(gt_boxes)
+                    for j in range(gt_boxes.shape[0]):
+                        if gt_role_inds[j] > -1:
+                            gt_roles[j] = vcocodb[i]['boxes'][gt_role_inds[j]]
+
+                    agent_boxes = pred_agents[:, :4]
+                    role_boxes = pred_roles[:, 5 * aid: 5 * aid + 4, rid]
+                    agent_scores = pred_roles[:, 5 * aid + 4, rid]
+
+                    valid = np.where(np.isnan(agent_scores) == False)[0]
+                    agent_scores = agent_scores[valid]
+                    agent_boxes = agent_boxes[valid, :]
+                    role_boxes = role_boxes[valid, :]
+
+                    idx = agent_scores.argsort()[::-1]
+
+                    # keep track of detected instances for each action for each role
+                    covered_1 = np.zeros((gt_boxes.shape[0]), dtype=np.bool_)
+                    covered_2 = np.zeros((gt_boxes.shape[0]), dtype=np.bool_)
+                    for j in idx:
+                        pred_box = agent_boxes[j, :]
+                        overlaps = get_overlap(gt_boxes, pred_box)
+
+                        # matching happens based on the person
+                        jmax = overlaps.argmax()
+                        ovmax = overlaps.max()
+
+                        # if matched with an instance with no annotations
+                        # continue
+                        if ignore[jmax]:
+                            continue
+
+                        is_true_action = (gt_actions[jmax, aid] == 1)
+                        sc_1[aid][rid].append(agent_scores[j])
+                        sc_2[aid][rid].append(agent_scores[j])
+                        if not (is_true_action and ovmax >= ovr_thresh):
+                            fp_1[aid][rid].append(1)
+                            tp_1[aid][rid].append(0)
+                            fp_2[aid][rid].append(1)
+                            tp_2[aid][rid].append(0)
+                            continue
+
+                        # overlap between predicted role and gt role
+                        ov_role_1 = 0.0
+                        ov_role_2 = 1.0
+                        if np.all(gt_roles[jmax, :] == -1):
+                            if np.all(role_boxes[j, :] == 0.0) or np.all(np.isnan(role_boxes[j, :])):  # if no gt role
+                                ov_role_1 = 1.0
+                        else:
+                            ov_role_1 = get_overlap(gt_roles[jmax, :].reshape((1, 4)), role_boxes[j, :])
+                            ov_role_2 = ov_role_1
+
+                        # 场景1
+                        if ov_role_1 >= ovr_thresh:
+                            if covered_1[jmax]:
+                                fp_1[aid][rid].append(1)
+                                tp_1[aid][rid].append(0)
+                            else:
+                                fp_1[aid][rid].append(0)
+                                tp_1[aid][rid].append(1)
+                                covered_1[jmax] = True
+                        else:
+                            fp_1[aid][rid].append(1)
+                            tp_1[aid][rid].append(0)
+
+                        # 场景2
+                        if ov_role_2 >= ovr_thresh:
+                            if covered_2[jmax]:
+                                fp_2[aid][rid].append(1)
+                                tp_2[aid][rid].append(0)
+                            else:
+                                fp_2[aid][rid].append(0)
+                                tp_2[aid][rid].append(1)
+                                covered_2[jmax] = True
+                        else:
+                            fp_2[aid][rid].append(1)
+                            tp_2[aid][rid].append(0)
+
+        # compute ap for each action
+        role_ap_1 = _compute_role_ap(self.num_actions, self.roles, fp_1, tp_1, sc_1, npos)
+        role_ap_2 = _compute_role_ap(self.num_actions, self.roles, fp_2, tp_2, sc_2, npos)
+
+        _print_role_ap(
+            num_actions=self.num_actions,
+            roles=self.roles,
+            actions=self.actions,
+            npos=npos,
+            role_ap=role_ap_1,
+            eval_type=1
+        )
+        _print_role_ap(
+            num_actions=self.num_actions,
+            roles=self.roles,
+            actions=self.actions,
+            npos=npos,
+            role_ap=role_ap_2,
+            eval_type=2
+        )
+
+        return role_ap_1, role_ap_2
+
+
+def _print_role_ap(num_actions, roles, actions, npos, role_ap, eval_type):
+    print('---------Reporting Role AP (%)------------------')
+    for aid in range(num_actions):
+        if len(roles[aid]) < 2: continue
+        for rid in range(len(roles[aid]) - 1):
+            print('{: >23}: AP = {:0.2f} (#pos = {:d})'.format(actions[aid] + '-' + roles[aid][rid + 1],
+                                                               role_ap[aid, rid] * 100.0, int(npos[aid])))
+    eval_type = f"scenario_{eval_type}"
+    print(f'Average Role [%s] AP = %.2f' % (eval_type, np.nanmean(role_ap) * 100.00))
+    print('---------------------------------------------')
+
+
+def _compute_role_ap(num_actions, roles, fp, tp, sc, npos):
+    # compute ap for each action
+    role_ap = np.zeros((num_actions, 2), dtype=np.float32)
+    role_ap[:] = np.nan
+    for aid in range(num_actions):
+        if len(roles[aid]) < 2:
+            continue
+        for rid in range(len(roles[aid]) - 1):
+            a_fp = np.array(fp[aid][rid], dtype=np.float32)
+            a_tp = np.array(tp[aid][rid], dtype=np.float32)
+            a_sc = np.array(sc[aid][rid], dtype=np.float32)
+            # sort in descending score order
+            idx = a_sc.argsort()[::-1]
+            a_fp = a_fp[idx]
+            a_tp = a_tp[idx]
+
+            a_fp = np.cumsum(a_fp)
+            a_tp = np.cumsum(a_tp)
+            rec = a_tp / float(npos[aid])
+            # check
+            assert (np.amax(rec) <= 1)
+            prec = a_tp / np.maximum(a_tp + a_fp, np.finfo(np.float64).eps)
+            role_ap[aid, rid] = voc_ap(rec, prec)
+
+    return role_ap
+
 
 
 def _load_vcoco(vcoco_file):
@@ -429,3 +657,17 @@ def voc_ap(rec, prec):
     # and sum (\Delta recall) * prec
     ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
+
+
+if __name__ == "__main__":
+    vsrl_annot_file = "/workspace/tmp/v-coco/data/vcoco/vcoco_test.json"
+    coco_file = "/workspace/tmp/v-coco/data/instances_vcoco_all_2014.json"
+    split_file = "/workspace/tmp/v-coco/data/splits/vcoco_test.ids"
+
+    # Change this line to match the path of your cached file
+    det_file = "/workspace/code/dl_github/HOIDet/data/cache.pkl"
+
+    # print("Loading cached results from {det_file}.")
+    vcocoeval = VCOCOeval(vsrl_annot_file, coco_file, split_file)
+    # vcocoeval._do_eval(det_file, ovr_thresh=0.5)
+    vcocoeval.eval(det_file, ovr_thresh=0.5)
