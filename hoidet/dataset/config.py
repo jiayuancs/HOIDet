@@ -42,7 +42,12 @@ VCOCO_INFO = DatasetInfo(
     },
     object_class_num=80,
     hoi_class_num=-1,  # vcoco 数据集不需要统计该类别信息
-    verb_class_num=24
+    verb_class_num=24,
+    others={
+        "evaluation_file": {
+            "test": "evaluation/vcoco_eval_test.pkl",  # 预处理的评测数据
+        }
+    }
 )
 
 if __name__ == '__main__':

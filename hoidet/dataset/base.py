@@ -23,7 +23,8 @@ class DatasetInfo:
                  partition_anno: dict,
                  object_class_num: int,
                  hoi_class_num: int,
-                 verb_class_num: int):
+                 verb_class_num: int,
+                 others = None):
         """
         描述一个数据集
         Args:
@@ -36,6 +37,7 @@ class DatasetInfo:
             object_class_num: 物体类别数量
             hoi_class_num: HOI类别数量，即动词与物体的组合数量
             verb_class_num: 动词类别数量
+            others: 其他自定义数据
         """
         self._name = name
         self._data_root = data_root
@@ -47,6 +49,8 @@ class DatasetInfo:
         self._object_class_num = object_class_num
         self._hoi_class_num = hoi_class_num
         self._verb_class_num = verb_class_num
+
+        self._others = others
 
     def set_root(self, root: str):
         """
@@ -73,6 +77,9 @@ class DatasetInfo:
 
     def get_object_class_num(self):
         return self._object_class_num
+
+    def get_others(self):
+        return self._others
 
     def get_anno_path(self, partition: str) -> str:
         """
