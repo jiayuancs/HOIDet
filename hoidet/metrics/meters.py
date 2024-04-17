@@ -14,7 +14,7 @@ import multiprocessing
 from torch import Tensor
 from collections import deque
 from typing import Optional, Iterable, Any, List, Union, Tuple
-from hoidet.ops.transforms import to_tensor
+from hoidet.utils.transforms import to_list_of_tensor
 
 __all__ = [
     'Meter', 'NumericalMeter', 'HandyTimer',
@@ -512,10 +512,8 @@ class DetectionAPMeter:
                 "The given output does not have the same number of classes as labels"
             assert len(output) == num_cls, \
                 "The number of classes in the given output does not match the argument"
-            self._output = to_tensor(output,
-                                     input_format='list', dtype=self._dtype, device='cpu')
-            self._labels = to_tensor(labels,
-                                     input_format='list', dtype=self._dtype, device='cpu')
+            self._output = to_list_of_tensor(output, dtype=self._dtype, device='cpu')
+            self._labels = to_list_of_tensor(labels, dtype=self._dtype, device='cpu')
         else:
             raise AssertionError("Output and labels should both be given or None")
 

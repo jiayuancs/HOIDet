@@ -15,7 +15,7 @@ import torch.distributed as dist
 from torch.nn import Module
 from typing import Callable, Iterable, Optional
 
-from hoidet.ops.relocate import relocate_to_cuda
+from hoidet.utils.relocate import relocate_to_cuda
 from hoidet.utils.distributed import SyncedNumericalMeter
 from hoidet.core.engines import State
 

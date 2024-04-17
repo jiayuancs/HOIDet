@@ -12,7 +12,7 @@ import pickle
 import torch.distributed as dist
 
 from typing import Optional, Union, Any, List
-from hoidet.utils.meters import NumericalMeter
+from hoidet.metrics.meters import NumericalMeter
 
 
 class SyncedNumericalMeter(NumericalMeter):

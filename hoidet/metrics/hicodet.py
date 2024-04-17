@@ -7,7 +7,8 @@ from torch import Tensor
 from tqdm import tqdm
 
 from hoidet.dataset import HICO_DET_INFO, DatasetInfo, HICODet
-from hoidet.utils import BoxPairAssociation, DetectionAPMeter
+from hoidet.metrics.association import BoxPairAssociation
+from hoidet.metrics.meters import DetectionAPMeter
 
 __all__ = ['HICODetMetric', 'HICODetResultTemplate']
 

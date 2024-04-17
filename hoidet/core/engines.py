@@ -16,8 +16,8 @@ from torch.nn import Module
 from typing import Callable, Iterable, Optional, Any
 
 from hoidet.dataset.base import DataDict
-from hoidet.ops.relocate import relocate_to_device
-from hoidet.utils.meters import NumericalMeter, AveragePrecisionMeter
+from hoidet.utils.relocate import relocate_to_device
+from hoidet.metrics.meters import NumericalMeter, AveragePrecisionMeter
 
 __all__ = [
     'LearningEngine',

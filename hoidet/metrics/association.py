@@ -12,7 +12,7 @@ import torch
 from typing import Tuple, Optional
 from torch import FloatTensor, LongTensor
 
-from hoidet.ops import box_iou
+from hoidet.utils.boxes import box_iou
 
 
 class BoxAssociation:
