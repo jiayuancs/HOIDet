@@ -19,6 +19,8 @@ HICO_DET_INFO = DatasetInfo(
         "train2015": "instances_train2015.json",
         "test2015": "instances_test2015.json"
     },
+    training_partition="train2015",
+    testing_partition="test2015",
     object_class_num=80,
     hoi_class_num=600,
     verb_class_num=117
@@ -40,6 +42,8 @@ VCOCO_INFO = DatasetInfo(
         "trainval": "instances_vcoco_trainval_size.json",
         "test": "instances_vcoco_test_size.json"
     },
+    training_partition="trainval",
+    testing_partition="test",
     object_class_num=80,
     hoi_class_num=-1,  # vcoco 数据集不需要统计该类别信息
     verb_class_num=24,

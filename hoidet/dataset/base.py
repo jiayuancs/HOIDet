@@ -21,6 +21,8 @@ class DatasetInfo:
                  data_root: str,
                  partition_image: dict,
                  partition_anno: dict,
+                 training_partition: str,
+                 testing_partition: str,
                  object_class_num: int,
                  hoi_class_num: int,
                  verb_class_num: int,
@@ -34,6 +36,8 @@ class DatasetInfo:
                 例如 {"train2015": "hico_20160224_det/images/train2015"}
             partition_anno: 分区名称与标注文件的映射关系
                 例如 {"train2015", "instances_train2015.json"}
+            training_partition: 用于训练的分区名称,
+            testing_partition: 用于测试的分区名称,
             object_class_num: 物体类别数量
             hoi_class_num: HOI类别数量，即动词与物体的组合数量
             verb_class_num: 动词类别数量
@@ -45,6 +49,9 @@ class DatasetInfo:
         self._partition_anno = partition_anno
         assert self._partition_image.keys() == self._partition_anno.keys()
         self._partition = list(self._partition_image.keys())
+
+        self._training_partition = training_partition
+        self._testing_partition = testing_partition
 
         self._object_class_num = object_class_num
         self._hoi_class_num = hoi_class_num
@@ -77,6 +84,15 @@ class DatasetInfo:
 
     def get_object_class_num(self):
         return self._object_class_num
+
+    def get_partitions(self):
+        return self._partition
+
+    def get_training_partition(self):
+        return self._training_partition
+
+    def get_testing_partition(self):
+        return self._testing_partition
 
     def get_others(self):
         return self._others
