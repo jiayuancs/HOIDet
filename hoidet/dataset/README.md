@@ -6,8 +6,17 @@
 
 按照如下仓库说明获取对应的数据集：
 
-- 获取 HICO-DET 数据集： [fredzzhang/hicodet](https://github.com/fredzzhang/hicodet)
-- 获取 V-COCO 数据集：[jiayuancs/vcoco](https://github.com/jiayuancs/vcoco)
+- 获取 HICO-DET 数据集： [hicodet](https://github.com/jiayuancs/hicodet)，注意要切换到 `class` 分支
+- 获取 V-COCO 数据集：[vcoco](https://github.com/jiayuancs/vcoco)
+
+其中，[hicodet](https://github.com/jiayuancs/hicodet) 的 `class` 分支使用与 COCO 数据集一致的类别编号；
+而 [vcoco](https://github.com/jiayuancs/vcoco) 的类别编号是 COCO 数据集编号加 1，
+并 增加了一个 `background` 类别作为 0 号类别。因此，使用 [vcoco](https://github.com/jiayuancs/vcoco)
+时需要注意**编号映射**。
+
+> 注意，two-stage HOI 检测器通常使用预训练的 DETR 目标检测器（或其变体），
+> 这些预训练的目标检测器输出的类别编号是 COCO 数据集中的编号。
+> 因此，为了简化训练过程，我们需要让 HICO-DET 和 V-COCO 中的物体编号与 COCO 数据集保持一致。
 
 完成上述操作后，这里假设 HICO-DET 和 V-COCO 数据集仓库在本地的路径分别为：
 
