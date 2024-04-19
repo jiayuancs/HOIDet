@@ -13,13 +13,46 @@ import torch
 import torch.distributed as dist
 
 from torch.nn import Module
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, Optional, Any
 
 from hoidet.utils.relocate import relocate_to_cuda
 from hoidet.utils.distributed import SyncedNumericalMeter
-from hoidet.core.engines import State
+from hoidet.dataset.base import DataDict
 
 __all__ = ['DistributedLearningEngine']
+
+
+class State:
+    """
+    Dict-based state class
+    """
+
+    def __init__(self) -> None:
+        self._state = DataDict()
+
+    def state_dict(self) -> dict:
+        """Return the state dict"""
+        return self._state.copy()
+
+    def load_state_dict(self, dict_in: dict) -> None:
+        """Load state from external dict"""
+        for k in self._state:
+            self._state[k] = dict_in[k]
+
+    def fetch_state_key(self, key: str) -> Any:
+        """Return a specific key"""
+        if key in self._state:
+            return self._state[key]
+        else:
+            raise KeyError("Inexistent key {}".format(key))
+
+    def update_state_key(self, **kwargs) -> None:
+        """Override specific keys in the state"""
+        for k in kwargs:
+            if k in self._state:
+                self._state[k] = kwargs[k]
+            else:
+                raise KeyError("Inexistent key {}".format(k))
 
 
 class DistributedLearningEngine(State):
