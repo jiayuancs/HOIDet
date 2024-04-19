@@ -220,7 +220,7 @@ class DatasetBase(Dataset):
         """返回所有图片名称列表"""
         return self._filenames
 
-    def get_image_ids(self, idx: int) -> int:
+    def get_image_id(self, idx: int) -> int:
         """返回指定索引图片的ID（即图片名称中的数字）"""
         return self._anno[idx]['image_id']
 
