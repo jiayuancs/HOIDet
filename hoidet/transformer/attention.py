@@ -93,12 +93,12 @@ class MultiHeadAttention(nn.Module):
             query_shape: 即 [seq_len_q, batch_size, head_num, head_dim]
             key_shape: 即 [seq_len_k, batch_size, head_num, head_dim]
 
-        Returns: 形状为 [seq_len_q, seq_len_k, batch_size, 1]
+        Returns: 形状为 [seq_len_q, seq_len_k, batch_size, 1], 最后一个维度为1，在多头注意力中自动广播为头的数量
 
         """
         q_len, k_len = query_shape[0], key_shape[0]
         batch_size = query_shape[1]
-        mask = mask.unsqueeze(1).expand(batch_size, q_len, k_len)
+        mask = mask.unsqueeze(0).expand(q_len, k_len, batch_size).unsqueeze(3)
         return mask
 
     def forward(self, *,
@@ -119,8 +119,8 @@ class MultiHeadAttention(nn.Module):
                key_value_mask[i,j,b]表示对于批量中的第b个样本中的第i个查询向量，其是否能够访问到第j个键值对，
                True 表示能访问，False 表示不能访问
             key_padding_mask: 形状为 [seq_len_k, batch_size] 的 bool 张量,
-                key_padding_mask[i,b]表示对于批量中的第b个样本中的第i个key向量，其第i个分量是否有效（即是否为非padding），
-                True 表示有效，False 表示该分量是 padding
+                key_padding_mask[i,b]表示批量中的第b个样本中的第i个key向量是否有效（即是否为非padding），
+                True 表示有效，False 表示该key是 padding
 
         Returns:
 

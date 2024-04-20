@@ -97,19 +97,22 @@ class TransformerEncoderLayer(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, dim: int = 256, head_num: int = 8, layer_num: int = 2, dropout: float = 0.1):
+    def __init__(self, dim: int = 256, head_num: int = 8, layer_num: int = 2, dropout: float = 0.1,
+                 pos_dim: int = None):
         """
         Args:
             dim: 输入和输出特征的维度
             head_num: head的数量
             layer_num: encoder的层数
             dropout: dropout
+            pos_dim: pos_dim: 输入的位置编码的维度，如果为 None，则表示与 dim 相同
         """
         super().__init__()
         self.layer_num = layer_num
         self.layers = nn.ModuleList([TransformerEncoderLayer(
             dim=dim, head_num=head_num,
-            ffn_interm_dim=dim * 4, dropout=dropout
+            ffn_interm_dim=dim * 4, dropout=dropout,
+            pos_dim=pos_dim
         ) for _ in range(layer_num)])
 
     def forward(self, x: Tensor, pos: Tensor):
