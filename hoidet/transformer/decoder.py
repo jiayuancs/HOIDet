@@ -230,6 +230,12 @@ class TransformerDecoder(nn.Module):
             因此，无论哪种情况，都可以用 output[-1] 获取最后一层的计算结果
 
         """
+        # 在 HOI 检测器中，当图片中没有人物对时，输入到 decoder 中的 query 就是空的，
+        # 此时无需执行后续计算，直接返回即可
+        if query.numel() == 0:
+            rp = self.layer_num if self.return_intermediate else 1
+            return query.unsqueeze(0).repeat(rp, 1, 1, 1)
+
         output = query
         intermediate = []
         for layer in self.layers:
