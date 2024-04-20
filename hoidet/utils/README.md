@@ -7,3 +7,4 @@
 - [association.py](./association.py) 用于判定预测结果中哪些是TP
 - [meters.py](./meters.py) 存放数值指标，以及计算 AP
 - [distributed.py](./distributed.py)
+- [ops.py](./ops.py) 来自 [PVIC](https://github.com/fredzzhang/pvic/blob/main/ops.py)
