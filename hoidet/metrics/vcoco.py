@@ -134,9 +134,12 @@ class VCOCOMetric:
         self.vcoco_eval.print_role_ap(self.get_ap(scenario), scenario)
         print(f"Remove point-instr: Average Role [scenario_{scenario}] AP = {self.get_map(scenario):.4f}")
 
+    def summary(self):
+        return (f"mAP s1: {self.get_map_s1():.4f},\t"
+                f"mAP s2: {self.get_map_s2():.4f}")
+
 
 if __name__ == "__main__":
     vcoco = VCOCOMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/vcoco_pred.pkl")
     vcoco.eval()  # 评测
-    vcoco.print_map(1)
-    vcoco.print_map(2)
+    print(vcoco.summary())

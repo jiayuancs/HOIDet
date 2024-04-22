@@ -157,10 +157,13 @@ class HICODetMetric:
         non_rare = torch.nonzero(num_anno >= hoi_class_num_threshold).squeeze(1)
         return self.ap[non_rare].mean()
 
+    def summary(self):
+        return (f"mAP: {self.get_full_map():.4f},\t"
+                f"rare mAP: {self.get_rare_map():.4f},\t"
+                f"non-rare mAP: {self.get_non_rare_map():.4f}")
+
 
 if __name__ == '__main__':
     hicodet = HICODetMetric(pred_file_path="/workspace/code/dl_github/HOIDet/data/hicodet_pred.pkl")
     hicodet.eval()
-    print(f"mAP: {hicodet.get_full_map():.4f}\n"
-          f"rare mAP: {hicodet.get_rare_map():.4f}\n"
-          f"non-rare mAP: {hicodet.get_non_rare_map():.4f}")
+    print(hicodet.summary())
