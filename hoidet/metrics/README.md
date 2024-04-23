@@ -79,3 +79,21 @@ vcoco.eval()  # 评测
 print(f"role AP S1: {vcoco.get_map_s1():0.4f}")
 print(f"role AP S2: {vcoco.get_map_s2():0.4f}")
 ```
+
+## 自动评估
+
+如果模型预测结果文件的命名格式满足正则表达式 `^(hicodet|vcoco)_\d\d\.pkl$`，则可以使用如下自动评估程序。
+
+自动评估程序监控指定目录下的文件变动（递归），如果有新增的文件，
+且文件名与正则表达式 `^(hicodet|vcoco)_\d\d\.pkl$` 匹配，则根据文件名前缀中的数据集名称，
+自动调用相关数据集的评估工具，完成评估过程。
+
+评估完成后，程序将评估结果保存在与模型预测结果文件相同的目录下，文件后缀为 `.txt`，文件名与模型预测结果文件相同。
+
+```python
+from hoidet.metrics import auto_eval
+
+auto_eval(
+    monitored_dir="/path/to/predict"
+)
+```
