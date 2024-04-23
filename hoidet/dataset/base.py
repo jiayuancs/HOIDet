@@ -225,8 +225,8 @@ class DatasetBase(Dataset):
         return self._anno[idx]['image_id']
 
     def get_index(self, image_id: int) -> int:
-        """获取指定图片ID在该数据集中的索引，返回-1表示该图片ID不存在"""
-        return self._image_id_to_index[image_id] if image_id in self._image_id_to_index.keys() else -1
+        """获取指定图片ID在该数据集中的索引"""
+        return self._image_id_to_index[image_id]
 
     def get_hoi_class_name(self, idx: int) -> List[str]:
         """返回第idx个图片中所有的HOI文本标签"""
