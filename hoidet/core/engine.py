@@ -161,4 +161,56 @@ class HOIEngine(DistributedLearningEngine):
 
     @torch.no_grad()
     def _cache_vcoco(self):
-        raise NotImplementedError
+        dataloader = self.test_dataloader
+        net = self._state.net
+        net.eval()
+
+        dataset = dataloader.dataset.dataset
+
+        all_results = []
+        for batch in tqdm(dataloader, disable=(self._rank != 0)):
+            inputs = relocate_to_cuda(batch[:-1])
+            outputs = net(*inputs)
+            outputs = relocate_to_cpu(outputs, ignore=True)
+            targets = batch[-1]
+
+            results = VCOCOResultTemplate()
+            for output, target in zip(outputs, targets):
+                # Format detections
+                boxes = output['boxes']
+                verbs = output['labels']
+
+                image_id = target['image_id'].item()
+                data_idx = dataset.get_index(image_id)
+                ow, oh = dataset.image_sizes[data_idx]
+                h, w = output['size']
+                scale_fct = torch.as_tensor([
+                    ow / w, oh / h, ow / w, oh / h
+                ]).unsqueeze(0)
+                boxes *= scale_fct
+
+                results.append(
+                    image_id=image_id,
+                    boxes=boxes,
+                    human_box_idx=output['pairing'][:, 0],
+                    object_box_idx=output['pairing'][:, 1],
+                    hoi_score=output['scores'],
+                    verb_class_names=[dataset.verbs[verb] for verb in verbs]
+                )
+
+            # 将预测结果gather到0号进程上
+            results_ddp = [None for _ in range(dist.get_world_size())]
+            dist.gather_object(
+                obj=results.results,
+                object_gather_list=results_ddp if self._rank == 0 else None,
+                dst=0
+            )
+
+            if self._rank == 0:
+                for res in results_ddp:
+                    all_results.extend(res)
+
+        if self._rank == 0:
+            save_path = os.path.join(self.cache_path, f"{dataset.name}_{self._state.epoch:02d}.pkl")
+            with open(save_path, mode='wb') as fd:
+                pickle.dump(all_results, fd)

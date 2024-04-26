@@ -276,7 +276,8 @@ def _compute_role_ap(num_actions, roles, fp, tp, sc, npos):
             a_tp = np.cumsum(a_tp)
             rec = a_tp / float(npos[aid])
             # check
-            assert (np.amax(rec) <= 1)
+            if rec.size > 0:
+                assert (np.amax(rec) <= 1)
             prec = a_tp / np.maximum(a_tp + a_fp, np.finfo(np.float64).eps)
             role_ap[aid, rid] = voc_ap(rec, prec)
 
