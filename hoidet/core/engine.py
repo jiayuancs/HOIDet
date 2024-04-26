@@ -47,9 +47,9 @@ class HOIEngine(DistributedLearningEngine):
         self.max_norm = config.clip_max_norm
         self.test_dataloader = test_dataloader
 
-        self.cache_test_result = {
-            "hicodet": self.cache_hicodet,
-            "vcoco": self.cache_vcoco
+        self._cache_test_result = {
+            "hicodet": self._cache_hicodet,
+            "vcoco": self._cache_vcoco
         }[test_dataloader.dataset.name]
 
         self.cache_path = None
@@ -80,16 +80,23 @@ class HOIEngine(DistributedLearningEngine):
 
     def _on_start(self):
         """训练前保存模型在测试集上的推理结果"""
-        self.cache_test_result()
+        self.cache_results()
 
     def _on_end_epoch(self):
         """每个epoch后保存模型在测试集上的推理结果"""
-        self.cache_test_result()
+        self.cache_results()
 
     @torch.no_grad()
-    def cache_hicodet(self):
+    def cache_results(self):
+        """保存模型在测试集上的推理结果"""
         if self._rank == 0:
             print("start testing")
+        self._cache_test_result()
+
+    @torch.no_grad()
+    def _cache_hicodet(self):
+        # TODO: 当批量大小和GPU数量不同时，得到的结果会有细微的差别，暂不知原因
+        # 该代码修改自 PVIC，经测试 PVIC 原仓库也存在这种问题
         dataloader = self.test_dataloader
         net = self._state.net
         net.eval()
@@ -114,7 +121,7 @@ class HOIEngine(DistributedLearningEngine):
                 interactions = conversion[objects, verbs]
 
                 # 模型在推理时会对图片进行resize操作，故这里需要将预测的边界框进行等比缩放
-                image_id = target['image_id']
+                image_id = target['image_id'].item()
                 data_idx = dataset.get_index(image_id)
                 ow, oh = dataset.image_sizes[data_idx]
                 h, w = output['size']
@@ -153,5 +160,5 @@ class HOIEngine(DistributedLearningEngine):
                 pickle.dump(all_results, fd)
 
     @torch.no_grad()
-    def cache_vcoco(self):
+    def _cache_vcoco(self):
         raise NotImplementedError
