@@ -4,3 +4,6 @@
 data
 predict
 checkpoints
+
+__pycache__
+*.pyc
