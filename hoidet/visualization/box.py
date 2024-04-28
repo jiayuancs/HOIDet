@@ -7,7 +7,7 @@ import numpy as np
 
 from PIL import ImageDraw
 
-__all__ = ['draw_boxes', 'draw_box_pairs']
+__all__ = ['draw_boxes', 'draw_boxes_with_txt', 'draw_box_pairs']
 
 
 def draw_boxes(image, boxes, **kwargs):
@@ -29,6 +29,28 @@ def draw_boxes(image, boxes, **kwargs):
     canvas = ImageDraw.Draw(image)
     for box in boxes:
         canvas.rectangle(box, **kwargs)
+
+
+def draw_boxes_with_txt(image, boxes, labels, **kwargs):
+    """
+    在image上绘制矩形框
+
+    Arguments:
+        image(PIL Image)
+        boxes(torch.Tensor[N,4] or np.ndarray[N,4] or List[List[4]]): Bounding box
+            coordinates in the format (x1, y1, x2, y2)
+        kwargs(dict): Parameters for PIL.ImageDraw.Draw.rectangle
+    """
+    if isinstance(boxes, (torch.Tensor, list)):
+        boxes = np.asarray(boxes)
+    elif not isinstance(boxes, np.ndarray):
+        raise TypeError("Bounding box coords. should be torch.Tensor, np.ndarray or list")
+    boxes = boxes.reshape(-1, 4).tolist()
+
+    canvas = ImageDraw.Draw(image)
+    for box, label in zip(boxes, labels):
+        canvas.rectangle(box, **kwargs)
+        canvas.text((box[0], box[1]), str(label))
 
 
 def draw_box_pairs(image, boxes_1, boxes_2, width=3):
@@ -79,6 +101,8 @@ if __name__ == '__main__':
     hicodet = HICODet(partition="train2015")
     idx = 267
     image, target = hicodet[idx]
-    draw_box_pairs(image, target['boxes_h'], target['boxes_o'])
+    # draw_box_pairs(image, target['boxes_h'], target['boxes_o'])
+    draw_boxes_with_txt(image, target['boxes_o'], ["human" for i in range(len(target['boxes_h']))])
     image.save("output_image.jpg")
     print(hicodet.get_hoi_class_name(idx))
+
