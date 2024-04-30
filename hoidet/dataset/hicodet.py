@@ -35,6 +35,8 @@ class HICODet(DatasetBase):
         self.name = dataset_info.get_name()
         self.anno_path = dataset_info.get_anno_path(partition)
         self.image_path = dataset_info.get_image_path(partition)
+        self.depth_path = dataset_info.get_depth_path(partition)
+        self.depth_image_suffix = dataset_info.get_depth_image_suffix()
 
         self.object_class_num = dataset_info.get_object_class_num()
         self.hoi_class_num = dataset_info.get_hoi_class_num()
@@ -59,7 +61,7 @@ class HICODet(DatasetBase):
                     "object": list[N]
         """
         return self._transforms(
-            self.load_image(os.path.join(self.image_path, self._filenames[i])),
+            self.load_rgbd_image(self._filenames[i]),
             self._anno[i]
         )
 
@@ -205,7 +207,10 @@ class HICODet(DatasetBase):
 
 
 if __name__ == '__main__':
-    from config import HICO_DET_INFO
+    from config import HICO_DET_INFO, VCOCO_INFO
+    import torch
+    from PIL import Image
+    from tqdm import tqdm
 
     hico_det_train = HICODet(
         dataset_info=HICO_DET_INFO,
@@ -216,7 +221,19 @@ if __name__ == '__main__':
 
     from hoidet.visualization import draw_box_pairs
 
-    image, target = hico_det_train[2]
-    draw_box_pairs(image, target['boxes_h'], target['boxes_o'], width=3)
-    image.save("output_image.jpg")
-    print(hico_det_train.get_hoi_class_name(2))
+    idx = hico_det_train.get_index(8817)
+    rgbd_image, target = hico_det_train[idx]
+    image = rgbd_image[:3]
+    depth = rgbd_image[3]
+    # 将张量的值缩放到0到255之间，并转换为整数
+    image = (image * 255).to(torch.uint8)
+    depth = (depth * 255).to(torch.uint8)
+
+    # 将张量转换为PIL图像
+    pil_image = Image.fromarray(image.permute(1, 2, 0).cpu().numpy())
+    pil_depth = Image.fromarray(depth.cpu().numpy(), mode='L')
+    draw_box_pairs(pil_image, target['boxes_h'], target['boxes_o'], width=3)
+    draw_box_pairs(pil_depth, target['boxes_h'], target['boxes_o'], width=3)
+    pil_image.save("output_image.jpg")
+    pil_depth.save("output_image_depth.jpg")
+    print(hico_det_train.get_hoi_class_name(idx))

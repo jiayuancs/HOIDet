@@ -19,6 +19,11 @@ HICO_DET_INFO = DatasetInfo(
         "train2015": "instances_train2015.json",
         "test2015": "instances_test2015.json"
     },
+    partition_depth={
+        "train2015": "hico_20160224_det/depth_images/train2015",
+        "test2015": "hico_20160224_det/depth_images/test2015"
+    },
+    depth_image_suffix="_depth.png",
     training_partition="train2015",
     testing_partition="test2015",
     object_class_num=80,
@@ -42,6 +47,13 @@ VCOCO_INFO = DatasetInfo(
         "trainval": "instances_vcoco_trainval_size.json",
         "test": "instances_vcoco_test_size.json"
     },
+    partition_depth={  # TODO: 暂未为VCOCO数据集生成深度图
+        "train": None,
+        "val": None,
+        "trainval": None,
+        "test": None
+    },
+    depth_image_suffix="_depth.png",
     training_partition="trainval",
     testing_partition="test",
     object_class_num=80,

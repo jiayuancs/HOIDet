@@ -8,6 +8,8 @@
 import os
 import pickle
 
+import torch
+import torchvision
 from PIL import Image
 from torch.utils.data import Dataset
 from typing import Any, Callable, List, Optional, Tuple
@@ -21,6 +23,8 @@ class DatasetInfo:
                  data_root: str,
                  partition_image: dict,
                  partition_anno: dict,
+                 partition_depth: dict,
+                 depth_image_suffix: str,
                  training_partition: str,
                  testing_partition: str,
                  object_class_num: int,
@@ -36,6 +40,8 @@ class DatasetInfo:
                 例如 {"train2015": "hico_20160224_det/images/train2015"}
             partition_anno: 分区名称与标注文件的映射关系
                 例如 {"train2015", "instances_train2015.json"}
+            partition_depth: 分区名称与深度图目录的映射关系
+            depth_image_suffix：深度图片名称后缀
             training_partition: 用于训练的分区名称,
             testing_partition: 用于测试的分区名称,
             object_class_num: 物体类别数量
@@ -47,7 +53,10 @@ class DatasetInfo:
         self._data_root = data_root
         self._partition_image = partition_image
         self._partition_anno = partition_anno
+        self._partition_depth = partition_depth
+        self._depth_image_suffix = depth_image_suffix
         assert self._partition_image.keys() == self._partition_anno.keys()
+        assert self._partition_image.keys() == self._partition_depth.keys()
         self._partition = list(self._partition_image.keys())
 
         self._training_partition = training_partition
@@ -123,6 +132,22 @@ class DatasetInfo:
             f"Unknown {self._name} partition :{partition}"
         return os.path.join(self._data_root, self._partition_image[partition])
 
+    def get_depth_path(self, partition: str) -> str:
+        """
+        获取指定分区的深度图片目录完整路径
+        Args:
+            partition: 分区名称
+
+        Returns:
+
+        """
+        assert partition in self._partition, \
+            f"Unknown {self._name} partition :{partition}"
+        return os.path.join(self._data_root, self._partition_depth[partition])
+
+    def get_depth_image_suffix(self):
+        return self._depth_image_suffix
+
     def __str__(self) -> str:
         res = (f"Dataset: {self.get_name()}\n"
                f"\troot: {self.get_root()}\n"
@@ -157,6 +182,8 @@ class DatasetBase(Dataset):
         self.name = ""
         self.image_path = ""
         self.anno_path = ""
+        self.depth_path = ""
+        self.depth_image_suffix = ""
 
         self.object_class_num = -1
         self.verb_class_num = -1
@@ -169,6 +196,8 @@ class DatasetBase(Dataset):
         self._filenames = None
 
         self._image_id_to_index = dict()
+
+        self._image_to_tensor = torchvision.transforms.ToTensor()
 
     def __len__(self):
         return len(self._filenames)
@@ -240,6 +269,14 @@ class DatasetBase(Dataset):
         """Load an image as PIL.Image"""
         return Image.open(path).convert('RGB')
 
+    def load_rgbd_image(self, image_name: str) -> torch.Tensor:
+        """
+        加载图片和深度图，并将其合并为一个Tensor，形状为(4, H, W), 其中前3维是RGB，最后1维是depth
+        """
+        depth_name = image_name.split(".")[0] + self.depth_image_suffix
+        rgb_image = self._image_to_tensor(self.load_image(os.path.join(self.image_path, image_name)))
+        depth_image = self._image_to_tensor(self.load_image(os.path.join(self.depth_path, depth_name)))
+        return torch.cat((rgb_image, depth_image[0].unsqueeze(0)), dim=0)
 
 
 """

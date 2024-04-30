@@ -102,9 +102,18 @@ def crop(image, target, region):
 
 
 def hflip(image, target):
+    """
+
+    Args:
+        image: 形状为[..., H, W]的Tensor
+        target:
+
+    Returns:
+
+    """
     flipped_image = F.hflip(image)
 
-    w, h = image.size
+    h, w = image.shape[-2:]
 
     target = target.copy()
     if "boxes" in target:
@@ -157,13 +166,15 @@ def resize(image, target, size, max_size=None):
         else:
             return get_size_with_aspect_ratio(image_size, size, max_size)
 
-    size = get_size(image.size, size, max_size)
+    h, w = image.shape[-2:]
+    size = get_size((w, h), size, max_size)
     rescaled_image = F.resize(image, size)
+    r_h, r_w = rescaled_image.shape[-2:]
 
     if target is None:
         return rescaled_image, None
 
-    ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(rescaled_image.size, image.size))
+    ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip((r_w, r_h), (w, h)))
     ratio_width, ratio_height = ratios
 
     target = target.copy()
@@ -224,9 +235,10 @@ class RandomSizeCrop(object):
         self.min_size = min_size
         self.max_size = max_size
 
-    def __call__(self, img: PIL.Image.Image, target: dict):
-        w = random.randint(self.min_size, min(img.width, self.max_size))
-        h = random.randint(self.min_size, min(img.height, self.max_size))
+    def __call__(self, img: torch.Tensor, target: dict):
+        height, width = img.shape[-2:]
+        w = random.randint(self.min_size, min(width, self.max_size))
+        h = random.randint(self.min_size, min(height, self.max_size))
         region = T.RandomCrop.get_params(img, [h, w])
         return crop(img, target, region)
 
@@ -359,4 +371,14 @@ class ColorJitter(object):
         self.color_jitter = T.ColorJitter(brightness, contrast, saturatio, hue)
 
     def __call__(self, img, target):
-        return self.color_jitter(img), target
+        """
+
+        Args:
+            img: 形状为[..., H, W]的Tensor，仅对img[:3]执行ColorJitter
+            target:
+
+        Returns:
+
+        """
+        img[:3] = self.color_jitter(img[:3])
+        return img, target
