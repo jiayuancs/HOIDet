@@ -10,6 +10,7 @@ Microsoft Research Asia
 
 import os
 import pickle
+import time
 import sys
 import torch
 import random
@@ -20,7 +21,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, DistributedSampler
 
-from pvic import build_detector
+from pvic.pvic import build_detector
 from hoidet.core.engine import HOIEngine
 from hoidet.dataset import custom_collate, DataFactory, HICO_DET_INFO, VCOCO_INFO
 from hoidet.detector.detr_detector import detr_detector_args
@@ -29,6 +30,9 @@ warnings.filterwarnings("ignore")
 
 
 def main(rank, args):
+    # 确保0号进程先启动
+    if rank != 0:
+        time.sleep(1)
 
     dist.init_process_group(
         backend="nccl",

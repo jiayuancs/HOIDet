@@ -190,7 +190,9 @@ def compute_prior_scores(
 
 def compute_spatial_encodings(
         boxes_1: List[Tensor], boxes_2: List[Tensor],
-        shapes: List[Tuple[int, int]], eps: float = 1e-10
+        depth_1: List[Tensor], depth_2: List[Tensor],
+        shapes: List[Tuple[int, int]], eps: float = 1e-10,
+        e_inv: float = 0.3679
 ) -> Tensor:
     """
     Parameters:
@@ -210,7 +212,7 @@ def compute_spatial_encodings(
         Computed spatial encodings between the boxes (N, 36)
     """
     features = []
-    for b1, b2, shape in zip(boxes_1, boxes_2, shapes):
+    for b1, b2, d1, d2, shape in zip(boxes_1, boxes_2, depth_1, depth_2, shapes):
         h, w = shape
 
         c1_x = (b1[:, 0] + b1[:, 2]) / 2;
@@ -223,10 +225,16 @@ def compute_spatial_encodings(
         b2_w = b2[:, 2] - b2[:, 0];
         b2_h = b2[:, 3] - b2[:, 1]
 
-        d_x = torch.abs(c2_x - c1_x) / (b1_w + eps)
-        d_y = torch.abs(c2_y - c1_y) / (b1_h + eps)
+        # d_x = torch.abs(c2_x - c1_x) / (b1_w + eps)
+        # d_y = torch.abs(c2_y - c1_y) / (b1_h + eps)
+
+        # 除以图片宽高，避免数值溢出
+        d_x = torch.abs(c2_x - c1_x) / (w + eps)
+        d_y = torch.abs(c2_y - c1_y) / (h + eps)
 
         iou = torch.diag(box_ops.box_iou(b1, b2))
+
+        # 最大深度
 
         # Construct spatial encoding
         f = torch.stack([
@@ -234,9 +242,12 @@ def compute_spatial_encodings(
             c1_x / w, c1_y / h, c2_x / w, c2_y / h,
             # Relative box width and height
             b1_w / w, b1_h / h, b2_w / w, b2_h / h,
+
             # Relative box area
-            b1_w * b1_h / (h * w), b2_w * b2_h / (h * w),
-            b2_w * b2_h / (b1_w * b1_h + eps),
+            # 这部分容易数值溢出
+            # b1_w * b1_h / (h * w), b2_w * b2_h / (h * w),
+            # b2_w * b2_h / (b1_w * b1_h + eps),
+
             # Box aspect ratio
             b1_w / (b1_h + eps), b2_w / (b2_h + eps),
             # Intersection over union
@@ -246,12 +257,106 @@ def compute_spatial_encodings(
             (c2_x < c1_x).float() * d_x,
             (c2_y > c1_y).float() * d_y,
             (c2_y < c1_y).float() * d_y,
+            # 深度信息
+            d1, d2,
+            torch.abs(d2 - d1),
+            d1 * d2,
+            # 三维空间欧式距离
+            torch.sqrt(((c1_x - c2_x)/w) ** 2 + ((c1_y - c2_y)/h) ** 2 + (d1 - d2) ** 2),
         ], 1)
 
-        features.append(
-            torch.cat([f, torch.log(f + eps)], 1)
+        features.append(   # 加上e_inv(e的-1次方)，确保log的运算结果不会nan
+            torch.cat([f, torch.log(f + e_inv)], 1)
         )
-    return torch.cat(features)
+
+    tcf = torch.cat(features)
+    # if tcf.isnan().sum() != 0:
+    #     print("需要等于-")
+    assert tcf.isnan().sum() == 0, "一定要等于0啊"
+    return tcf
+
+
+def compute_spatial_encodings_(
+        boxes_1: List[Tensor], boxes_2: List[Tensor],
+        depth_1: List[Tensor], depth_2: List[Tensor],
+        shapes: List[Tuple[int, int]], eps: float = 1e-10,
+        e_inv: float = 0.3679
+) -> Tensor:
+    """
+    Parameters:
+    -----------
+    boxes_1: List[Tensor]
+        First set of bounding boxes (M, 4)
+    boxes_1: List[Tensor]
+        Second set of bounding boxes (M, 4)
+    shapes: List[Tuple[int, int]]
+        Image shapes, heights followed by widths
+    eps: float
+        A small constant used for numerical stability
+
+    Returns:
+    --------
+    Tensor
+        Computed spatial encodings between the boxes (N, 42)
+    """
+    features = []
+    for b1, b2, d1, d2, shape in zip(boxes_1, boxes_2, depth_1, depth_2, shapes):
+        h, w = shape
+
+        # 中心坐标
+        c1_x = (b1[:, 0] + b1[:, 2]) / 2 / (w + eps)
+        c1_y = (b1[:, 1] + b1[:, 3]) / 2 / (w + eps)
+        c2_x = (b2[:, 0] + b2[:, 2]) / 2 / (w + eps)
+        c2_y = (b2[:, 1] + b2[:, 3]) / 2 / (w + eps)
+
+        # 宽高
+        b1_w = (b1[:, 2] - b1[:, 0]) / (w + eps)
+        b1_h = (b1[:, 3] - b1[:, 1]) / (h + eps)
+        b2_w = (b2[:, 2] - b2[:, 0]) / (w + eps)
+        b2_h = (b2[:, 3] - b2[:, 1]) / (h + eps)
+
+        d_x = torch.abs(c2_x - c1_x) / (w + eps)
+        d_y = torch.abs(c2_y - c1_y) / (h + eps)
+        d_z = torch.abs(d2 - d1)
+
+        # IoU
+        iou = torch.diag(box_ops.box_iou(b1, b2))
+
+        # 并集面积
+        min_x, _ = torch.min(torch.stack((b1[:, 0], b2[:, 0]), dim=0), dim=0)
+        min_y, _ = torch.min(torch.stack((b1[:, 1], b2[:, 1]), dim=0), dim=0)
+        max_x, _ = torch.min(torch.stack((b1[:, 2], b2[:, 2]), dim=0), dim=0)
+        max_y, _ = torch.min(torch.stack((b1[:, 3], b2[:, 3]), dim=0), dim=0)
+        union_area = (max_y - min_y) * (max_x - min_x)
+
+        # Construct spatial encoding
+        f = torch.stack([
+            # 单个边界框的位置信息：中心坐标、宽、高、深、面积
+            c1_x, c1_y, b1_w, b1_h, d1, b1_w * b1_h,
+            c2_x, c2_y, b2_w, b2_h, d2, b2_w * b2_h,
+
+            # 相对位置关系
+            d_x, d_y, d_z,
+
+            # 欧式距离
+            torch.sqrt(d_x**2 + d_y**2 + d_z**2),
+
+            # 角度
+            torch.arctan(d_y / (d_x + eps)),
+            torch.arctan(d_z / (d_y + eps)),
+            torch.arctan(d_x / (d_z + eps)),
+
+            # 交集面积和并集面积
+            iou, union_area
+        ], 1)
+
+        features.append(   # 加上e_inv(e的-1次方)，确保log的运算结果不会nan
+            torch.cat([f, torch.log(torch.abs(f) + e_inv)], 1)
+        )
+
+    tcf = torch.cat(features)
+    assert tcf.isnan().sum() == 0
+    return tcf
 
 
 def binary_focal_loss_with_logits(

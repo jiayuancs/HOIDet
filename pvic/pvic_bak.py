@@ -5,6 +5,9 @@ Fred Zhang <frederic.zhang@anu.edu.au>
 
 The Australian National University
 Microsoft Research Asia
+
+原始的 PVIC 代码
+
 """
 
 import os
@@ -17,7 +20,7 @@ from collections import OrderedDict
 from typing import Optional, Tuple, List
 from torchvision.ops import FeaturePyramidNetwork
 
-from transformers import (
+from pvic.pvic_transformers import (
     TransformerEncoder,
     TransformerDecoder,
     TransformerDecoderLayer,

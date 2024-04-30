@@ -5,6 +5,7 @@ Fred Zhang <frederic.zhang@anu.edu.au>
 
 The Australian National University
 Microsoft Research Asia
+引入了深度图之后的 PVIC
 """
 
 import torch
@@ -16,6 +17,7 @@ from collections import OrderedDict
 from typing import Optional, Tuple, List
 from torchvision.ops import FeaturePyramidNetwork
 
+from hoidet.utils.box_ops import box_xyxy_to_xywh
 from hoidet.detector.detr_detector import DETR
 from hoidet.transformer import (
     TransformerEncoder,
@@ -23,11 +25,11 @@ from hoidet.transformer import (
     TransformerDecoderLayer
 )
 
-from transformers import SwinTransformer
+from pvic.pvic_transformers import SwinTransformer
 
 from hoidet.utils.ops import (
     binary_focal_loss_with_logits,
-    compute_spatial_encodings,
+    compute_spatial_encodings_,
     prepare_region_proposals,
     associate_with_ground_truth,
     compute_prior_scores,
@@ -75,7 +77,8 @@ class HumanObjectMatcher(nn.Module):
             nn.Linear(256, 2)
         )
         self.spatial_head = nn.Sequential(
-            nn.Linear(36, 128), nn.ReLU(),
+            nn.Linear(42, 128), nn.ReLU(),
+            # nn.Linear(36, 128), nn.ReLU(),
             nn.Linear(128, 256), nn.ReLU(),
             nn.Linear(256, repr_size), nn.ReLU(),
         )
@@ -108,7 +111,7 @@ class HumanObjectMatcher(nn.Module):
 
         return box_pe, c_pe
 
-    def forward(self, region_props, image_sizes, device=None):
+    def forward(self, region_props, image_sizes, boxes_depth, device=None):
         if device is None:
             device = region_props[0]["hidden_states"].device
 
@@ -117,7 +120,7 @@ class HumanObjectMatcher(nn.Module):
         prior_scores = []
         object_types = []
         positional_embeds = []
-        for i, rp in enumerate(region_props):
+        for i, (rp, depth) in enumerate(zip(region_props, boxes_depth)):
             boxes, scores, labels, embeds = rp.values()
             nh = self.check_human_instances(labels)
             n = len(boxes)
@@ -138,8 +141,10 @@ class HumanObjectMatcher(nn.Module):
             x = x.flatten()
             y = y.flatten()
             # Compute spatial features
-            pairwise_spatial = compute_spatial_encodings(
-                [boxes[x], ], [boxes[y], ], [image_sizes[i], ]
+            pairwise_spatial = compute_spatial_encodings_(
+                [boxes[x], ], [boxes[y], ],
+                [depth[x], ], [depth[y], ],
+                [image_sizes[i], ]
             )
             pairwise_spatial = self.spatial_head(pairwise_spatial)
             pairwise_spatial_reshaped = pairwise_spatial.reshape(n, n, -1)
@@ -446,9 +451,27 @@ class PViC(nn.Module):
             raise ValueError("In training mode, targets should be passed")
         image_sizes = torch.as_tensor([im.size()[-2:] for im in images], device=images[0].device)
 
+        imgs = []
+        depths = []
+        for i in range(len(images)):
+            imgs.append(images[i][:3])
+            depths.append(images[i][3])
+        images = imgs
+
         with torch.no_grad():
             results, hs, features = self.od_forward(self.detector, images)
             results = self.postprocessor(results, image_sizes)
+
+            # depths_sample = [dph.unsqueeze(0).expand(3, -1, -1) for dph in depths]
+            # samples = nested_tensor_from_tensor_list(depths_sample)
+            # depth_features, _ = self.detector.backbone(samples)
+            #
+            # # 深度图和特征图拼接到一起
+            # cat_feat = []
+            # for f, df in zip(features, depth_features):
+            #     cf = NestedTensor(tensors=torch.cat((f.tensors, df.tensors), dim=1), mask=f.mask)
+            #     cat_feat.append(cf)
+            # features = cat_feat
 
         region_props = prepare_region_proposals(
             results, hs[-1], image_sizes,
@@ -457,13 +480,26 @@ class PViC(nn.Module):
             min_instances=self.min_instances,
             max_instances=self.max_instances
         )
-        boxes = [r['boxes'] for r in region_props]
+        # boxes = [r['boxes'] for r in region_props]
+        # 计算每个 boxes 的深度
+        boxes = []  # boxes[i] 表示第i张图片中的所有边界框
+        boxes_depth = []  # boxes_depth[i] 表示第i张图片中的所有边界框深度
+        for r, d in zip(region_props, depths):
+            boxes_xywh = box_xyxy_to_xywh(r['boxes']).int()
+            dph = []
+            for x, y, w, h in boxes_xywh:
+                dph.append(d[y:y + h + 1, x:x + w + 1].mean())  # 每个边界框中所有像素深度的均值作为该边界框的深度
+            dph = torch.stack(dph, dim=0)  # 形状为(box_num,)，depths[i]表示该图片中第i个边界框的深度
+            dph = (dph - dph.min()) / (dph.max() - dph.min() + 1e-10)  # 归一化
+            boxes_depth.append(dph)
+            boxes.append(r['boxes'])
+
         # Produce human-object pairs.
         (
             ho_queries,
             paired_inds, prior_scores,
             object_types, positional_embeds
-        ) = self.ho_matcher(region_props, image_sizes)
+        ) = self.ho_matcher(region_props, image_sizes, boxes_depth)
         # Compute keys/values for triplet decoder.
         memory, mask = self.feature_head(features)
         b, h, w, c = memory.shape

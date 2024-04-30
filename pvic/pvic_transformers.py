@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 
 from torch import nn, Tensor
-from attention import MultiheadAttention
+from pvic.attention import MultiheadAttention
 from typing import List, Optional, Callable
 
 class TransformerEncoderLayer(nn.Module):
