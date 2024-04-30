@@ -1,3 +1,6 @@
 [submodule "detr"]
 	path = detr
 	url = git@github.com:jiayuancs/detr.git
+[submodule "vlm/CLIP"]
+	path = vlm/CLIP
+	url = git@github.com:jiayuancs/CLIP.git
