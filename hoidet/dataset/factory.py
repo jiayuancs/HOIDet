@@ -48,8 +48,9 @@ class DataFactory(Dataset):
 
         # 数据变换, 摘自: https://github.com/fredzzhang/upt/blob/main/utils.py
         normalize = T.Compose([
-            T.ToTensor(),
-            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            # T.ToTensor(),  # 默认情况下 self.dataset 中已经执行了 ToTensor()
+            # TODO: 统计所有深度图像的均值和方差
+            T.Normalize([0.485, 0.456, 0.406, 0.5], [0.229, 0.224, 0.225, 0.2])
         ])
         scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
         if self.is_training:  # 如果是训练集，则添加额外的数据变换
@@ -86,13 +87,48 @@ class DataFactory(Dataset):
 
 
 if __name__ == '__main__':
+    import torch
+    from PIL import Image
+
+
+    def _scale_to_255(x: torch.Tensor):
+        # 将张量的最小值移动到非负区间
+        min_val = x.min()
+        x = x - min_val
+
+        # 将张量的最大值移动到[0, 255]范围内
+        max_val = x.max()
+        if max_val != 0:
+            x = x * (255 / max_val)
+
+        # 将张量四舍五入为整数
+        x = torch.round(x)
+
+        return x.to(torch.uint8)
+
     hicodet_trainset = DataFactory(
         partition=HICO_DET_INFO.get_training_partition(),
         dataset_info=HICO_DET_INFO
     )
-    vcoco_trainset = DataFactory(
-        partition=VCOCO_INFO.get_training_partition(),
-        dataset_info=VCOCO_INFO
-    )
-    print(hicodet_trainset[0])
-    print(vcoco_trainset[1])
+    # vcoco_trainset = DataFactory(
+    #     partition=VCOCO_INFO.get_training_partition(),
+    #     dataset_info=VCOCO_INFO
+    # )
+    # print(hicodet_trainset[0])
+    # print(vcoco_trainset[1])
+
+    idx = hicodet_trainset.dataset.get_index(19135)
+    rgbd_image, target = hicodet_trainset[idx]
+    image = rgbd_image[:3]
+    depth = rgbd_image[3]
+
+    # 将张量的值缩放到0到255之间，并转换为整数
+    image = _scale_to_255(image)
+    depth = _scale_to_255(depth)
+
+    # 将张量转换为PIL图像
+    pil_image = Image.fromarray(image.permute(1, 2, 0).cpu().numpy())
+    pil_depth = Image.fromarray(depth.cpu().numpy(), mode='L')
+    pil_image.save("output_image.jpg")
+    pil_depth.save("output_image_depth.jpg")
+    print(hicodet_trainset.dataset.get_hoi_class_name(2))
